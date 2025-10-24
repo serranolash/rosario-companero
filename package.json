@@ -1,0 +1,26 @@
+{
+  "name": "rosario-companero",
+  "version": "1.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0 -p 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "14.2.15",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "next-pwa": "5.6.0",
+    "classnames": "2.5.1"
+  },
+  "devDependencies": {
+    "typescript": "5.4.5",
+    "@types/react": "18.2.43",
+    "@types/node": "20.11.30",
+    "autoprefixer": "10.4.18",
+    "postcss": "8.4.38",
+    "tailwindcss": "3.4.3"
+  }
+}

@@ -1,0 +1,121 @@
+[
+  {
+    "id": "gozosos",
+    "title": "Misterios Gozosos",
+    "days": [
+      "lunes",
+      "sábado"
+    ],
+    "decades": [
+      {
+        "title": "La Anunciación",
+        "hint": "Contemplemos la humildad de María"
+      },
+      {
+        "title": "La Visitación",
+        "hint": "La caridad fraterna"
+      },
+      {
+        "title": "El Nacimiento de Jesús",
+        "hint": "La alegría del Salvador"
+      },
+      {
+        "title": "La Presentación en el Templo",
+        "hint": "La obediencia de la Sagrada Familia"
+      },
+      {
+        "title": "El Niño Jesús hallado en el Templo",
+        "hint": "La sabiduría de Cristo"
+      }
+    ]
+  },
+  {
+    "id": "dolorosos",
+    "title": "Misterios Dolorosos",
+    "days": [
+      "martes",
+      "viernes"
+    ],
+    "decades": [
+      {
+        "title": "La Oración en el Huerto",
+        "hint": "La obediencia al Padre"
+      },
+      {
+        "title": "La Flagelación del Señor",
+        "hint": "La reparación"
+      },
+      {
+        "title": "La Coronación de Espinas",
+        "hint": "La paciencia en las pruebas"
+      },
+      {
+        "title": "Jesús con la Cruz a cuestas",
+        "hint": "El seguimiento de Cristo"
+      },
+      {
+        "title": "La Crucifixión y Muerte del Señor",
+        "hint": "El amor redentor"
+      }
+    ]
+  },
+  {
+    "id": "gloriosos",
+    "title": "Misterios Gloriosos",
+    "days": [
+      "domingo",
+      "miércoles"
+    ],
+    "decades": [
+      {
+        "title": "La Resurrección",
+        "hint": "La victoria sobre la muerte"
+      },
+      {
+        "title": "La Ascensión del Señor",
+        "hint": "La esperanza del cielo"
+      },
+      {
+        "title": "La Venida del Espíritu Santo",
+        "hint": "Los dones del Espíritu"
+      },
+      {
+        "title": "La Asunción de la Virgen",
+        "hint": "La gloria de María"
+      },
+      {
+        "title": "La Coronación de María",
+        "hint": "Reina y Señora"
+      }
+    ]
+  },
+  {
+    "id": "luminosos",
+    "title": "Misterios Luminosos",
+    "days": [
+      "jueves"
+    ],
+    "decades": [
+      {
+        "title": "El Bautismo del Señor",
+        "hint": "Ser hijos en el Hijo"
+      },
+      {
+        "title": "Las Bodas de Caná",
+        "hint": "María nos lleva a Jesús"
+      },
+      {
+        "title": "El Anuncio del Reino",
+        "hint": "Conversión y fe"
+      },
+      {
+        "title": "La Transfiguración",
+        "hint": "Escuchar al Hijo amado"
+      },
+      {
+        "title": "La Institución de la Eucaristía",
+        "hint": "Amor hasta el extremo"
+      }
+    ]
+  }
+]
