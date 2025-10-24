@@ -1,4 +1,5 @@
 'use client'
+
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { guessMysteryIdByLocalDate } from '@/lib/day-mysteries'
@@ -7,18 +8,21 @@ import { MysteryCard } from '@/components/MysteryCard'
 import { load } from '@/lib/storage'
 import { registerSW } from '@/lib/pwa'
 
-type Myst = typeof mysteriesData[number]
+type Myst = (typeof mysteriesData)[number]
 
-export default function Page(){
+export default function Page() {
   const [mounted, setMounted] = useState(false)
   const [count, setCount] = useState<number>(0)
   const [todays, setTodays] = useState<Myst | null>(null)
 
   useEffect(() => {
-    registerSW()
-    const c = load('rosary:count', 0)
+    // PWA
+    registerSW?.()
+
+    const c = Number(load('rosary:count', 0)) || 0
     const id = guessMysteryIdByLocalDate(new Date())
     const m = (mysteriesData as any).find((x: any) => x.id === id) as Myst | undefined
+
     setCount(c)
     setTodays(m ?? null)
     setMounted(true)
@@ -26,7 +30,7 @@ export default function Page(){
 
   if (!mounted) {
     return (
-      <div className="space-y-6">
+      <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
         <div className="card h-20" />
         <div className="card space-y-4">
           <div className="text-lg">Has completado <b>0</b> rosarios.</div>
@@ -40,7 +44,7 @@ export default function Page(){
   }
 
   return (
-    <div className="space-y-6">
+    <main className="mx-auto max-w-2xl px-4 py-8 space-y-6">
       <section className="space-y-2">
         <span className="badge">Misterio del día</span>
         {todays && (
@@ -66,6 +70,12 @@ export default function Page(){
       <p className="muted text-sm">
         Tip: podés instalar esta app desde el menú del navegador para usarla offline.
       </p>
-    </div>
+
+      <footer className="mt-10 text-center text-xs text-gray-500">
+        <span className="uppercase tracking-wide">
+          Desarrollado por <strong>Ing. Alex Serrano</strong>
+        </span>
+      </footer>
+    </main>
   )
 }
