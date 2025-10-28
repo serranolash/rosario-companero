@@ -1,8 +1,13 @@
 'use client'
 import { useEffect, useState } from 'react'
 
+type Reading = { key: 'FR'|'PS'|'SR'|'GSP', title: string, text: string }
+type Data =
+  | { ok: true, source: 'Evangelizo', date: string, titleLiturgic?: string, readings: Reading[], comment?: { title: string, text: string } }
+  | { ok: true, fallback: { source: 'USCCB', note: string, url: string } }
+
 export default function ReadingsWidget() {
-  const [html, setHtml] = useState<string | null>(null)
+  const [data, setData] = useState<Data|null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -12,67 +17,66 @@ export default function ReadingsWidget() {
         const r = await fetch('/api/lecturas', { cache: 'no-store' })
         const j = await r.json()
         if (!alive) return
-        if (j.ok && j.html) setHtml(j.html)
-        else setError('No se pudieron cargar las lecturas.')
-      } catch (e: any) {
+        setData(j)
+      } catch (e:any) {
         if (!alive) return
-        setError(e.message || 'Error de red.')
+        setError(e.message || 'Error de red')
       }
     })()
     return () => { alive = false }
   }, [])
 
-  if (error) {
+  if (error) return <div className="card">No se pudieron cargar las lecturas: {error}</div>
+  if (!data) return <div className="card">Cargando lecturas…</div>
+
+  // Fallback USCCB
+  if ('fallback' in data) {
     return (
-      <div className="card">
-        <p className="mb-2">No se pudieron cargar las lecturas automáticamente.</p>
-        <iframe
-          title="Lecturas del día"
-          src="https://universalis.com/es/mass.htm"
-          className="w-full h-[70vh] rounded-lg border"
-        />
+      <div className="card space-y-3">
+        <h3 className="text-xl font-semibold">Lecturas del día (USCCB)</h3>
+        <p className="opacity-80 text-sm">{data.fallback.note}</p>
+        <a href={data.fallback.url} target="_blank" rel="noopener noreferrer" className="btn">
+          Abrir lecturas en español (USCCB)
+        </a>
       </div>
     )
   }
 
-  if (!html) return <div className="card">Cargando lecturas…</div>
+  // Evangelizo
+  const R = data.readings
+  const badge = data.titleLiturgic ? (
+    <div className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-emerald-600/20 text-emerald-300 border border-emerald-700/30">
+      {data.titleLiturgic}
+    </div>
+  ) : null
 
   return (
-    <div className="card">
-      {/* Contenedor con reglas que doman tamaños y ocultan ruido */}
-      <div className="lecturas-container prose max-w-none prose-invert">
-        <div dangerouslySetInnerHTML={{ __html: html }} />
+    <div className="space-y-4">
+      <div className="card space-y-2">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-semibold">Lecturas del día</h3>
+          {badge}
+        </div>
+        <p className="text-xs opacity-70">Fuente: Evangelizo</p>
       </div>
 
-      {/* Estilos acotados al contenedor */}
-      <style jsx global>{`
-        .lecturas-container img,
-        .lecturas-container svg,
-        .lecturas-container iframe {
-          max-width: 100% !important;
-          height: auto !important;
-        }
-        .lecturas-container .icon,
-        .lecturas-container .icons,
-        .lecturas-container .social,
-        .lecturas-container .share,
-        .lecturas-container .banner,
-        .lecturas-container .menu,
-        .lecturas-container .navbar {
-          display: none !important;
-          visibility: hidden !important;
-        }
-        .lecturas-container a {
-          text-decoration: underline;
-        }
-        /* Asegura tipografía legible si vienen estilos propios */
-        .lecturas-container h1, .lecturas-container h2, .lecturas-container h3 {
-          margin-top: 0.75rem;
-          margin-bottom: 0.5rem;
-          line-height: 1.3;
-        }
-        .lecturas-container p { margin: 0.5rem 0; }
-      `}</style>
+      {R.map((r) => (
+        <div key={r.key} className="card">
+          <h4 className="text-lg font-semibold mb-2">{r.title}</h4>
+          <div className="prose prose-invert max-w-none text-sm whitespace-pre-wrap leading-relaxed">
+            {r.text}
+          </div>
+        </div>
+      ))}
+
+      {data.comment && (
+        <div className="card">
+          <h4 className="text-lg font-semibold mb-2">{data.comment.title}</h4>
+          <div className="prose prose-invert max-w-none text-sm whitespace-pre-wrap leading-relaxed">
+            {data.comment.text}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,55 +1,87 @@
 // src/app/api/lecturas/route.ts
 import { NextResponse } from 'next/server'
 
-function absolutize(html: string) {
-  // href/src relativos -> absolutos a universalis.com
-  return html
-    .replace(/href="\//g, 'href="https://universalis.com/')
-    .replace(/src="\//g, 'src="https://universalis.com/')
+// Util para formatear fecha en Argentina (YYYYMMDD)
+function yyyymmddInTZ(timeZone: string) {
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
+  const [y, m, d] = fmt.format(new Date()).split('-')
+  return `${y}${m}${d}`
 }
 
-function stripUnwanted(html: string) {
-  let h = html
-  // Quitar scripts y estilos inyectados
-  h = h.replace(/<script[\s\S]*?<\/script>/gi, '')
-  h = h.replace(/<style[\s\S]*?<\/style>/gi, '')
-  // Quitar bloques de redes, banners, navs, footers, etc. (best-effort)
-  h = h.replace(/<div[^>]*class="[^"]*(share|social|icons|banner|navbar|menu|footer|header)[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
-  h = h.replace(/<nav[\s\S]*?<\/nav>/gi, '')
-  h = h.replace(/<footer[\s\S]*?<\/footer>/gi, '')
-  h = h.replace(/<header[\s\S]*?<\/header>/gi, '')
-  // Forzar atributo lang a es (cosmético)
-  h = h.replace(/lang="en"/gi, 'lang="es"')
-  return h
+// Fetch a Evangelizo "type=reading" or "reading_lt" en español (lang=SP)
+async function evzFetch(date: string, what: 'reading' | 'reading_lt' | 'comment' | 'comment_t' | 'liturgic_t', content?: 'FR'|'PS'|'SR'|'GSP') {
+  const base = 'https://feed.evangelizo.org/v2/reader.php'
+  const params = new URLSearchParams({ date, type: what, lang: 'SP' })
+  if (content) params.set('content', content)
+  const url = `${base}?${params.toString()}`
+  const res = await fetch(url, { next: { revalidate: 60 * 60 }, headers: { 'Accept': 'text/plain; charset=utf-8' } })
+  if (!res.ok) throw new Error(`Evangelizo ${what}/${content || ''} -> ${res.status}`)
+  const txt = await res.text()
+  // Evita "NULL" o vacío
+  if (!txt || /^null$/i.test(txt.trim())) return ''
+  return txt.trim()
+}
+
+// Fallback muy simple al RSS ES de USCCB (nota: calendario USA)
+async function usccbFallback() {
+  // RSS español. No publican JSON; mostramos el enlace para lectura directa.
+  // Política: se permite mostrar lecturas vía RSS en sitios sin acceso condicionado.
+  // (Referencia en políticas de copyright USCCB)
+  const feedUrl = 'https://bible.usccb.org/es/lecturas' // página del día en ES
+  return {
+    source: 'USCCB',
+    note: 'Mostrando enlace del día (calendario EE.UU.).',
+    url: feedUrl,
+  }
 }
 
 export async function GET() {
   try {
-    // ✅ Forzar español usando la variante /es/
-    const url = 'https://universalis.com/es/mass.htm'
-    const res = await fetch(url, {
-      headers: {
-        // refuerzo adicional
-        'Accept-Language': 'es-ES,es;q=0.9'
-      },
-      // revalidar cada 2h
-      next: { revalidate: 60 * 60 * 2 }
-    })
-    if (!res.ok) throw new Error(`Universalis ${res.status}`)
+    const date = yyyymmddInTZ('America/Argentina/Buenos_Aires')
 
-    const full = await res.text()
-    const bodyMatch = full.match(/<body[^>]*>([\s\S]*?)<\/body>/i)
-    const body = bodyMatch ? bodyMatch[1] : full
+    // Títulos breves y textos
+    const [fr_t, ps_t, sr_t, gsp_t] = await Promise.all([
+      evzFetch(date, 'reading_lt', 'FR').catch(()=>''),
+      evzFetch(date, 'reading_lt', 'PS').catch(()=>''),
+      evzFetch(date, 'reading_lt', 'SR').catch(()=>''),
+      evzFetch(date, 'reading_lt', 'GSP').catch(()=>''),
+    ])
 
-    const fixed = absolutize(stripUnwanted(body))
+    const [fr, ps, sr, gsp] = await Promise.all([
+      evzFetch(date, 'reading', 'FR').catch(()=>''),
+      evzFetch(date, 'reading', 'PS').catch(()=>''),
+      evzFetch(date, 'reading', 'SR').catch(()=>''),
+      evzFetch(date, 'reading', 'GSP').catch(()=>''),
+    ])
 
-    return NextResponse.json({ ok: true, html: fixed }, {
-      headers: {
-        // evitar servir cache viejo a los clientes
-        'Cache-Control': 'no-store'
-      }
-    })
+    const [titleLiturgic, commentTitle, comment] = await Promise.all([
+      evzFetch(date, 'liturgic_t').catch(()=>''),
+      evzFetch(date, 'comment_t').catch(()=>''),
+      evzFetch(date, 'comment').catch(()=>''),
+    ])
+
+    // Si Evangelio viene vacío por alguna rareza, hacemos fallback
+    if (!gsp) {
+      const fb = await usccbFallback()
+      return NextResponse.json({ ok: true, fallback: fb })
+    }
+
+    return NextResponse.json({
+      ok: true,
+      source: 'Evangelizo',
+      date,
+      titleLiturgic,
+      readings: [
+        fr ? { key: 'FR', title: fr_t || 'Primera lectura', text: fr } : null,
+        ps ? { key: 'PS', title: ps_t || 'Salmo responsorial', text: ps } : null,
+        sr ? { key: 'SR', title: sr_t || 'Segunda lectura', text: sr } : null,
+        gsp ? { key: 'GSP', title: gsp_t || 'Evangelio', text: gsp } : null,
+      ].filter(Boolean),
+      comment: comment ? { title: commentTitle || 'Comentario', text: comment } : null,
+    }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message || 'fetch error' }, { status: 500 })
+    // Error total → fallback
+    const fb = await usccbFallback()
+    return NextResponse.json({ ok: true, fallback: fb })
   }
 }
