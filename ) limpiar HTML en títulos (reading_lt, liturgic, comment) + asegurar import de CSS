@@ -1,0 +1,758 @@
+[1mdiff --git a/src/app/(session)/pray/[mode]/page.tsx b/src/app/(session)/pray/[mode]/page.tsx[m
+[1mindex 354a7f4..eb22db8 100644[m
+[1m--- a/src/app/(session)/pray/[mode]/page.tsx[m
+[1m+++ b/src/app/(session)/pray/[mode]/page.tsx[m
+[36m@@ -1,213 +1,293 @@[m
+ 'use client'[m
+ import { useEffect, useMemo, useRef, useState } from 'react'[m
+[31m-import { useParams, useRouter } from 'next/navigation'[m
+[31m-import prayers from '@/data/prayers.es.json'[m
+[31m-import mysteriesSets from '@/data/mysteries.es.json'[m
+[32m+[m[32mimport Link from 'next/link'[m
+ import { audio } from '@/lib/audio'[m
+[31m-import { createRecognizer, classifyPrayer } from '@/lib/recognition'[m
+[32m+[m[32mimport { recognition } from '@/lib/recognition'[m
+[32m+[m[32mimport prayers from '@/data/prayers.es.json'[m
+[32m+[m[32mimport mysteriesData from '@/data/mysteries.es.json' // { id, title, days, decades?: [{title,desc,img}] }[m
+[32m+[m
+[32m+[m[32mtype Phase =[m
+[32m+[m[32m  | 'INTRO'[m
+[32m+[m[32m  | 'ANNOUNCE_1' | 'PN_USER' | 'PN_APP'[m
+[32m+[m[32m  | 'AVE_USER' | 'AVE_APP'[m
+[32m+[m[32m  | 'GLORIA_BLOCK'[m
+[32m+[m[32m  | 'NEXT_DECADE'[m
+[32m+[m[32m  | 'DONE'[m
+ [m
+[31m-type StepKind =[m
+[31m-  | 'PROLOGO' | 'ANUNCIO' | 'PN' | 'AVE' | 'GLORIA_BLOQUE'[m
+[31m-  | 'SIGUIENTE_MISTERIO' | 'LETANIAS' | 'ORACION_FINAL' | 'INTENCIONES' | 'SALVE' | 'FIN'[m
+[32m+[m[32mconst MAX_DECADES = 5;[m
+ [m
+[31m-type Step = { kind: StepKind; label: string; meta?: any }[m
+[32m+[m[32m/* =======================[m
+[32m+[m[32m   A) Normalización por title (con fallback)[m
+[32m+[m[32m   ======================= */[m
+[32m+[m[32mtype Decade = { title: string; desc?: string; img?: string };[m
+[32m+[m[32mtype MysteryGroup = { id: string; title: string; days: string[]; decades?: Decade[] };[m
+ [m
+[31m-function getToday(): string {[m
+[31m-  const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'][m
+[31m-  const d = new Date()[m
+[31m-  return dias[d.getDay()][m
+[32m+[m[32m// Títulos de respaldo si el JSON no trae "decades"[m
+[32m+[m[32mconst FALLBACK_DECADES: Record<string, string[]> = {[m
+[32m+[m[32m  Gozosos: [[m
+[32m+[m[32m    'La Encarnación del Hijo de Dios',[m
+[32m+[m[32m    'La Visitación de Nuestra Señora a Santa Isabel',[m
+[32m+[m[32m    'El Nacimiento del Hijo de Dios',[m
+[32m+[m[32m    'La Presentación de Jesús en el Templo',[m
+[32m+[m[32m    'El Niño Jesús perdido y hallado'[m
+[32m+[m[32m  ],[m
+[32m+[m[32m  Dolorosos: [[m
+[32m+[m[32m    'La Oración de Jesús en el Huerto',[m
+[32m+[m[32m    'La Flagelación del Señor',[m
+[32m+[m[32m    'La Coronación de espinas',[m
+[32m+[m[32m    'Jesús con la Cruz a cuestas',[m
+[32m+[m[32m    'La Crucifixión y Muerte de Jesús'[m
+[32m+[m[32m  ],[m
+[32m+[m[32m  Gloriosos: [[m
+[32m+[m[32m    'La Resurrección del Señor',[m
+[32m+[m[32m    'La Ascensión del Señor',[m
+[32m+[m[32m    'La Venida del Espíritu Santo',[m
+[32m+[m[32m    'La Asunción de la Virgen',[m
+[32m+[m[32m    'La Coronación de María Santísima'[m
+[32m+[m[32m  ],[m
+[32m+[m[32m  Luminosos: [[m
+[32m+[m[32m    'El Bautismo en el Jordán',[m
+[32m+[m[32m    'Las Bodas de Caná',[m
+[32m+[m[32m    'El Anuncio del Reino',[m
+[32m+[m[32m    'La Transfiguración',[m
+[32m+[m[32m    'La Institución de la Eucaristía'[m
+[32m+[m[32m  ],[m
+[32m+[m[32m};[m
+[32m+[m
+[32m+[m[32mfunction normalizeMysteries(raw: MysteryGroup[]): (MysteryGroup & { decades: Decade[] })[] {[m
+[32m+[m[32m  return raw.map(m => ({[m
+[32m+[m[32m    ...m,[m
+[32m+[m[32m    decades: (m.decades && m.decades.length)[m
+[32m+[m[32m      ? m.decades[m
+[32m+[m[32m      : (FALLBACK_DECADES[m.title] || []).map(t => ({ title: t })),[m
+[32m+[m[32m  })) as any;[m
+ }[m
+[31m-function getTodaySet() {[m
+[31m-  const today = getToday()[m
+[31m-  return (mysteriesSets as any[]).find(s => s.days.includes(today)) || mysteriesSets[0][m
+[32m+[m
+[32m+[m[32m/* ===== Helper para determinar el grupo de hoy por título ===== */[m
+[32m+[m[32mfunction todayMysteryGroup() {[m
+[32m+[m[32m  const d = new Date().getDay(); // 0=domingo[m
+[32m+[m[32m  // lun/sab Gozosos, mar/vie Dolorosos, mie/dom Gloriosos, jue Luminosos[m
+[32m+[m[32m  if (d === 1 || d === 6) return 'Gozosos';[m
+[32m+[m[32m  if (d === 2 || d === 5) return 'Dolorosos';[m
+[32m+[m[32m  if (d === 3 || d === 0) return 'Gloriosos';[m
+[32m+[m[32m  return 'Luminosos';[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32m/* ======= Utilidades varias ======= */[m
+[32m+[m[32mfunction includesSome(text: string, keys: string[]) {[m
+[32m+[m[32m  const t = (text || '').toLowerCase();[m
+[32m+[m[32m  return keys.some(k => t.includes(k.toLowerCase()));[m
+[32m+[m[32m}[m
+[32m+[m[32mfunction ordinal(n: number) {[m
+[32m+[m[32m  return ['Primer','Segundo','Tercer','Cuarto','Quinto'][n-1] || `${n}º`;[m
+ }[m
+ [m
+ export default function PrayPage() {[m
+[31m-  const router = useRouter()[m
+[31m-  const { mode } = useParams<{mode: string}>() // 'rosario' | 'decena'[m
+[31m-  const [autoResponder, setAutoResponder] = useState(true)[m
+[32m+[m[32m  const [phase, setPhase] = useState<Phase>('INTRO');[m
+[32m+[m[32m  const [decadeIdx, setDecadeIdx] = useState(0);[m
+[32m+[m[32m  const [aveCount, setAveCount] = useState(0);[m
+[32m+[m[32m  const [showLine, setShowLine] = useState<string | null>(null);[m
+[32m+[m[32m  const [busy, setBusy] = useState(false);[m
+[32m+[m
+[32m+[m[32m  // A) Computar por title (no por group)[m
+[32m+[m[32m  const groupTitle = useMemo(() => todayMysteryGroup(), []);[m
+[32m+[m[32m  const mysteries = useMemo(() => normalizeMysteries(mysteriesData as any), []);[m
+[32m+[m[32m  const mystery = useMemo([m
+[32m+[m[32m    () => mysteries.find((m: any) => m.title === groupTitle) || mysteries[0],[m
+[32m+[m[32m    [mysteries, groupTitle][m
+[32m+[m[32m  );[m
+[32m+[m[32m  const decade = useMemo(() => mystery?.decades?.[decadeIdx], [mystery, decadeIdx]);[m
+ [m
+[31m-  // --- VOZ: escucha al feligrés y responde sólo la "segunda mitad"[m
+[31m-  const recRef = useRef<ReturnType<typeof createRecognizer> | null>(null)[m
+[32m+[m[32m  // Conecta audio con STT + línea UI[m
+   useEffect(() => {[m
+[31m-    audio.init()[m
+[31m-    if (!autoResponder) { recRef.current?.stop(); return }[m
+[31m-    const rec = createRecognizer((text) => {[m
+[31m-      const which = classifyPrayer(text)[m
+[31m-      if (which === 'AM') audio.sayOrPlay(prayers.ave_maria.parte2, '/audio/ave-maria/parte2.mp3')[m
+[31m-      if (which === 'PN') audio.sayOrPlay(prayers.padre_nuestro.parte2, '/audio/padre-nuestro/parte2.mp3')[m
+[31m-      if (which === 'GLORIA') audio.sayOrPlay(prayers.gloria.parte2, '/audio/gloria/parte2.mp3')[m
+[31m-    })[m
+[31m-    recRef.current = rec[m
+[31m-    if (rec.isSupported) rec.start()[m
+[31m-    return () => rec.stop()[m
+[31m-  }, [autoResponder])[m
+[31m-[m
+[31m-  // --- FLUJO CORRECTO DEL ROSARIO ---[m
+[31m-  const flow = useMemo<Step[]>(() => {[m
+[31m-    const set = getTodaySet()[m
+[31m-    const totalDecades = mode === 'decena' ? 1 : 5[m
+[31m-    const steps: Step[] = [][m
+[31m-[m
+[31m-    // PROEMIO (sin 3 Ave iniciales)[m
+[31m-    steps.push({ kind:'PROLOGO', label:'Inicio del Rosario' })[m
+[31m-[m
+[31m-    for (let i=0; i<totalDecades; i++) {[m
+[31m-      const decTitle = set.decades[i]?.title || `Misterio ${i+1}`[m
+[31m-      steps.push({ kind:'ANUNCIO', label:`${i+1}º Misterio • ${set.title}`, meta:{decTitle} })[m
+[31m-      steps.push({ kind:'PN', label:'Padre Nuestro' })[m
+[31m-      // 10 Ave Marías (usuario dice parte1; app responde parte2)[m
+[31m-      steps.push({ kind:'AVE', label:'Ave María (1-10)' })[m
+[31m-      // Gloria + María Madre de gracia + Oh Jesús mío[m
+[31m-      steps.push({ kind:'GLORIA_BLOQUE', label:'Gloria y oraciones' })[m
+[31m-      if (i < totalDecades-1) steps.push({ kind:'SIGUIENTE_MISTERIO', label:'Siguiente misterio' })[m
+[32m+[m[32m    audio.init();[m
+[32m+[m[32m    audio.setRecognitionHooks({ pause: () => recognition.pause(), resume: () => recognition.resume() });[m
+[32m+[m[32m    audio.setOnLine((l) => setShowLine(l));[m
+[32m+[m[32m    recognition.start();[m
+[32m+[m[32m    runIntro();[m
+[32m+[m[32m    // eslint-disable-next-line react-hooks/exhaustive-deps[m
+[32m+[m[32m  }, []);[m
+[32m+[m
+[32m+[m[32m  async function runIntro() {[m
+[32m+[m[32m    setBusy(true);[m
+[32m+[m[32m    setPhase('INTRO');[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      await audio.sayOrPlay(prayers.por_la_senal, '/audio/intro/por-la-senal.mp3');[m
+[32m+[m[32m      await audio.sayOrPlay(prayers.acto_contricion, '/audio/intro/acto-contricion.mp3');[m
+[32m+[m[32m      await audio.sayOrPlay(prayers.abre_labios.peticion, '/audio/intro/abre-labios-p.mp3');[m
+[32m+[m[32m      await audio.sayOrPlay(prayers.abre_labios.respuesta, '/audio/intro/abre-labios-r.mp3');[m
+[32m+[m[32m      await audio.sayOrPlay(prayers.ven_auxilio.peticion, '/audio/intro/ven-auxilio-p.mp3');[m
+[32m+[m[32m      await audio.sayOrPlay(prayers.ven_auxilio.respuesta, '/audio/intro/ven-auxilio-r.mp3');[m
+[32m+[m[32m      await audio.sayOrPlay(prayers.gloria.parte1, '/audio/gloria/parte1.mp3');[m
+[32m+[m[32m      await audio.sayOrPlay(prayers.gloria.parte2, '/audio/gloria/parte2.mp3');[m
+[32m+[m[32m    } catch { /* ignorar */ }[m
+[32m+[m[32m    finally {[m
+[32m+[m[32m      setBusy(false);[m
+[32m+[m[32m      // Anunciar misterio 1[m
+[32m+[m[32m      setPhase('ANNOUNCE_1');[m
+[32m+[m[32m      setTimeout(announceFirst, 100);[m
+     }[m
+[32m+[m[32m  }[m
+ [m
+[31m-    if (mode !== 'decena') {[m
+[31m-      steps.push({ kind:'LETANIAS', label:'Letanías de la Santísima Virgen' })[m
+[31m-      steps.push({ kind:'ORACION_FINAL', label:'Oración final' })[m
+[31m-      steps.push({ kind:'INTENCIONES', label:'Por las intenciones del Santo Padre' })[m
+[31m-      steps.push({ kind:'SALVE', label:'Salve' })[m
+[32m+[m[32m  async function announceFirst() {[m
+[32m+[m[32m    if (!mystery || !decade) { setPhase('PN_USER'); return; }[m
+[32m+[m[32m    setBusy(true);[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      // A) usar mystery.title (no mystery.group)[m
+[32m+[m[32m      await audio.sayOrPlay([m
+[32m+[m[32m        `Primer misterio ${mystery.title}: ${decade.title}.`,[m
+[32m+[m[32m        '/audio/misterios/announce-1.mp3'[m
+[32m+[m[32m      );[m
+[32m+[m[32m    } catch {}[m
+[32m+[m[32m    finally {[m
+[32m+[m[32m      setBusy(false);[m
+[32m+[m[32m      setPhase('PN_USER');[m
+[32m+[m[32m      recognition.waitFor(['padre nuestro', 'padrenuestro'], 12000).then(() => {[m
+[32m+[m[32m        // Alternancia controlada por botón/reconocimiento; no forzamos nada aquí[m
+[32m+[m[32m      });[m
+     }[m
+[32m+[m[32m  }[m
+ [m
+[31m-    steps.push({ kind:'FIN', label:'Rosario completado' })[m
+[31m-    return steps[m
+[31m-  }, [mode])[m
+[31m-[m
+[31m-  const [idx, setIdx] = useState(0)[m
+[31m-  const step = flow[idx][m
+[31m-  const [aveCount, setAveCount] = useState(0)[m
+[31m-[m
+[31m-  // Helpers de avance[m
+[31m-  const next = () => setIdx(i => Math.min(i+1, flow.length-1))[m
+[31m-  const back = () => setIdx(i => Math.max(i-1, 0))[m
+[31m-[m
+[31m-  // Acciones por paso[m
+[31m-  async function handleAction() {[m
+[31m-    switch (step.kind) {[m
+[31m-      case 'PROLOGO':[m
+[31m-        await audio.sayOrPlay(prayers.por_la_senal, '/audio/extras/por-la-senal.mp3')[m
+[31m-        await audio.sayOrPlay(prayers.acto_contricion, '/audio/extras/acto-contricion.mp3')[m
+[31m-        await audio.sayOrPlay(prayers.abre_labios.peticion, '/audio/extras/abre-labios-p.mp3')[m
+[31m-        await audio.sayOrPlay(prayers.abre_labios.respuesta, '/audio/extras/abre-labios-r.mp3')[m
+[31m-        await audio.sayOrPlay(prayers.ven_auxilio.peticion, '/audio/extras/ven-auxilio-p.mp3')[m
+[31m-        await audio.sayOrPlay(prayers.ven_auxilio.respuesta, '/audio/extras/ven-auxilio-r.mp3')[m
+[31m-        await audio.sayOrPlay(prayers.gloria_breve, '/audio/extras/gloria-breve.mp3')[m
+[31m-        next()[m
+[31m-        break[m
+[31m-[m
+[31m-      case 'ANUNCIO':[m
+[31m-        await audio.sayOrPlay(`Anunciamos el ${step.meta.decTitle}`, '/audio/extras/anuncio.mp3')[m
+[31m-        next()[m
+[31m-        break[m
+[31m-[m
+[31m-      case 'PN':[m
+[31m-        // El feligrés reza su parte (o pulsa botón). La app responde la segunda mitad:[m
+[31m-        await audio.sayOrPlay(prayers.padre_nuestro.parte2, '/audio/padre-nuestro/parte2.mp3')[m
+[31m-        setAveCount(0)[m
+[31m-        next()[m
+[31m-        break[m
+[31m-[m
+[31m-      case 'AVE':[m
+[31m-        // Cada pulsación responde la mitad de la AVE y avanza el contador.[m
+[31m-        if (aveCount < 10) {[m
+[31m-          await audio.sayOrPlay(prayers.ave_maria.parte2, '/audio/ave-maria/parte2.mp3')[m
+[31m-          const n = aveCount + 1[m
+[31m-          setAveCount(n)[m
+[31m-          if (n === 10) next()[m
+[31m-        }[m
+[31m-        break[m
+[31m-[m
+[31m-      case 'GLORIA_BLOQUE':[m
+[31m-        await audio.sayOrPlay(prayers.gloria.parte2, '/audio/gloria/parte2.mp3')[m
+[31m-        await audio.sayOrPlay(prayers.maria_madre_gracia, '/audio/extras/maria-madre-gracia.mp3')[m
+[31m-        await audio.sayOrPlay(prayers.oh_jesus_mio, '/audio/extras/oh-jesus-mio.mp3')[m
+[31m-        next()[m
+[31m-        break[m
+[31m-[m
+[31m-      case 'SIGUIENTE_MISTERIO':[m
+[31m-        setAveCount(0)[m
+[31m-        next()[m
+[31m-        break[m
+[31m-[m
+[31m-      case 'LETANIAS':[m
+[31m-        // Mostramos el texto en pantalla (scroll) y damos un TTS de inicio[m
+[31m-        await audio.sayOrPlay('Letanías de la Santísima Virgen', '/audio/extras/letanias.mp3')[m
+[31m-        next()[m
+[31m-        break[m
+[31m-[m
+[31m-      case 'ORACION_FINAL':[m
+[31m-        await audio.sayOrPlay(prayers.oracion_final, '/audio/extras/oracion-final.mp3')[m
+[31m-        next()[m
+[31m-        break[m
+[31m-[m
+[31m-      case 'INTENCIONES':[m
+[31m-        // PN, AVE y Gloria por las intenciones del Santo Padre (responde las segundas partes)[m
+[31m-        await audio.sayOrPlay(prayers.padre_nuestro.parte2, '/audio/padre-nuestro/parte2.mp3')[m
+[31m-        await audio.sayOrPlay(prayers.ave_maria.parte2, '/audio/ave-maria/parte2.mp3')[m
+[31m-        await audio.sayOrPlay(prayers.gloria.parte2, '/audio/gloria/parte2.mp3')[m
+[31m-        next()[m
+[31m-        break[m
+[31m-[m
+[31m-      case 'SALVE':[m
+[31m-        await audio.sayOrPlay(prayers.salve, '/audio/extras/salve.mp3')[m
+[31m-        next()[m
+[31m-        break[m
+[31m-[m
+[31m-      case 'FIN':[m
+[31m-        break[m
+[32m+[m[32m  // Handlers de flujo manual (por si el STT no detecta)[m
+[32m+[m[32m  const nextStep = async () => {[m
+[32m+[m[32m    if (busy) return;[m
+[32m+[m
+[32m+[m[32m    if (phase === 'PN_USER') {[m
+[32m+[m[32m      setBusy(true);[m
+[32m+[m[32m      await audio.sayOrPlay(prayers.padre_nuestro.parte2, '/audio/pn/parte2.mp3');[m
+[32m+[m[32m      setBusy(false);[m
+[32m+[m[32m      setPhase('AVE_USER');[m
+[32m+[m[32m      setAveCount(0);[m
+[32m+[m[32m      return;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    if (phase === 'AVE_USER') {[m
+[32m+[m[32m      // El feligrés dice su mitad del Ave; la app responde la segunda mitad[m
+[32m+[m[32m      setBusy(true);[m
+[32m+[m[32m      await audio.sayOrPlay(prayers.ave_maria.parte2, '/audio/ave/parte2.mp3'); // "Santa María..."[m
+[32m+[m[32m      setBusy(false);[m
+[32m+[m[32m      const n = aveCount + 1;[m
+[32m+[m[32m      setAveCount(n);[m
+[32m+[m[32m      if (n >= 10) {[m
+[32m+[m[32m        setPhase('GLORIA_BLOCK');[m
+[32m+[m[32m        runGloriaBlock();[m
+[32m+[m[32m      } else {[m
+[32m+[m[32m        setPhase('AVE_USER'); // siguiente AVE[m
+[32m+[m[32m      }[m
+[32m+[m[32m      return;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    if (phase === 'GLORIA_BLOCK') {[m
+[32m+[m[32m      // Se maneja dentro de runGloriaBlock()[m
+[32m+[m[32m      return;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    if (phase === 'NEXT_DECADE') {[m
+[32m+[m[32m      // Avanzar decena[m
+[32m+[m[32m      const idx = decadeIdx + 1;[m
+[32m+[m[32m      if (idx >= MAX_DECADES) { setPhase('DONE'); return; }[m
+[32m+[m[32m      setDecadeIdx(idx);[m
+[32m+[m[32m      setAveCount(0);[m
+[32m+[m[32m      setPhase('ANNOUNCE_1');[m
+[32m+[m
+[32m+[m[32m      // A) usar mystery.title + decade por índice normalizado[m
+[32m+[m[32m      await audio.sayOrPlay([m
+[32m+[m[32m        `${ordinal(idx + 1)} misterio ${mystery.title}: ${mystery.decades[idx].title}.`,[m
+[32m+[m[32m        '/audio/misterios/announce-next.mp3'[m
+[32m+[m[32m      );[m
+[32m+[m
+[32m+[m[32m      setPhase('PN_USER');[m
+[32m+[m[32m      return;[m
+[32m+[m[32m    }[m
+[32m+[m[32m  };[m
+[32m+[m
+[32m+[m[32m  /* =======================[m
+[32m+[m[32m     B) Bloque Gloria con claves seguras + fallback[m
+[32m+[m[32m     ======================= */[m
+[32m+[m[32m  async function runGloriaBlock() {[m
+[32m+[m[32m    setBusy(true);[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      await audio.sayOrPlay(prayers.gloria.parte1, '/audio/gloria/parte1.mp3');[m
+[32m+[m[32m      await audio.sayOrPlay(prayers.gloria.parte2, '/audio/gloria/parte2.mp3');[m
+[32m+[m
+[32m+[m[32m      const madre = (prayers as any)['maria_madre_de_gracia'][m
+[32m+[m[32m        || 'María, Madre de gracia, Madre de misericordia. Defiéndenos de nuestros enemigos y ampáranos ahora y en la hora de nuestra muerte. Amén.';[m
+[32m+[m
+[32m+[m[32m      const oh = (prayers as any)['oh_jesus_mio'][m
+[32m+[m[32m        || 'Oh Jesús mío, perdónanos, líbranos del fuego del infierno y lleva a todas las almas al cielo, especialmente a las más necesitadas.';[m
+[32m+[m
+[32m+[m[32m      await audio.sayOrPlay(madre, '/audio/extras/maria-madre.mp3');[m
+[32m+[m[32m      await audio.sayOrPlay(oh, '/audio/extras/oh-jesus-mio.mp3');[m
+[32m+[m[32m    } catch { /* ignore */ }[m
+[32m+[m[32m    finally {[m
+[32m+[m[32m      setBusy(false);[m
+[32m+[m[32m      setPhase('NEXT_DECADE');[m
+     }[m
+   }[m
+ [m
+[31m-  // UI[m
+[31m-  return ([m
+[31m-    <div className="p-6 max-w-3xl mx-auto space-y-4">[m
+[31m-      <div className="flex items-center justify-between">[m
+[31m-        <button onClick={() => router.back()} className="btn btn-secondary">← Volver</button>[m
+[31m-        <div className="flex items-center gap-2">[m
+[31m-          <label className="text-sm">Auto-respuesta</label>[m
+[31m-          <input type="checkbox" checked={autoResponder} onChange={e=>setAutoResponder(e.target.checked)} />[m
+[31m-        </div>[m
+[31m-      </div>[m
+[32m+[m[32m  // Reconocimiento “blando” para alternar (no rompe si falla)[m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    const off = recognition.on(async (txt) => {[m
+[32m+[m[32m      if (busy) return;[m
+ [m
+[31m-      <h1 className="text-2xl font-bold">Rosario Compañero</h1>[m
+[32m+[m[32m      if (phase === 'PN_USER') {[m
+[32m+[m[32m        if (includesSome(txt, ['padre nuestro', 'padrenuestro', 'santificado'])) {[m
+[32m+[m[32m          await nextStep();[m
+[32m+[m[32m        }[m
+[32m+[m[32m      } else if (phase === 'AVE_USER') {[m
+[32m+[m[32m        if (includesSome(txt, ['dios te salve', 'bendita tú eres', 'bendito es el fruto'])) {[m
+[32m+[m[32m          await nextStep();[m
+[32m+[m[32m        }[m
+[32m+[m[32m      }[m
+[32m+[m[32m    });[m
+[32m+[m[32m    return () => { try { off(); } catch {} };[m
+[32m+[m[32m  }, [phase, busy, aveCount]);[m
+ [m
+[31m-      <div className="card space-y-2">[m
+[31m-        <div className="text-sm opacity-80">Paso {idx+1} / {flow.length}</div>[m
+[31m-        <h2 className="text-lg font-semibold">{step.label}</h2>[m
+[32m+[m[32m  return ([m
+[32m+[m[32m    <main className="container mx-auto px-4 py-6">[m
+[32m+[m[32m      <div className="flex items-center gap-3 mb-4">[m
+[32m+[m[32m        <Link href="/" className="text-sm underline">← Volver</Link>[m
+[32m+[m[32m        <h1 className="text-2xl md:text-3xl font-extrabold">Rezo del Rosario</h1>[m
+[32m+[m[32m      </div>[m
+ [m
+[31m-        {step.kind === 'ANUNCIO' && ([m
+[31m-          <p className="opacity-80">{step.meta?.decTitle}</p>[m
+[31m-        )}[m
+[32m+[m[32m      {/* Línea visible cuando la app reza (intro o anuncios) */}[m
+[32m+[m[32m      {showLine && ([m
+[32m+[m[32m        <div className="card mb-4">[m
+[32m+[m[32m          <p className="text-lg leading-relaxed">{showLine}</p>[m
+[32m+[m[32m          <p className="text-sm muted">Recitemos juntos esta parte.</p>[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m      )}[m
+ [m
+[31m-        {step.kind === 'AVE' && ([m
+[31m-          <div className="opacity-80">Ave María {aveCount} / 10 (di tu mitad y la app responde; o pulsa el botón)</div>[m
+[32m+[m[32m      {/* Estado actual */}[m
+[32m+[m[32m      <div className="card mb-4">[m
+[32m+[m[32m        <p className="mb-2"><b>Misterio del día:</b> {mystery?.title}</p>[m
+[32m+[m[32m        <p className="mb-2"><b>Decena:</b> {decadeIdx + 1} / 5</p>[m
+[32m+[m[32m        {decade && ([m
+[32m+[m[32m          <>[m
+[32m+[m[32m            <p><b>Título:</b> {decade.title}</p>[m
+[32m+[m[32m            {decade.desc && <p className="muted mt-1">{decade.desc}</p>}[m
+[32m+[m[32m          </>[m
+         )}[m
+[32m+[m[32m      </div>[m
+ [m
+[31m-        {step.kind === 'LETANIAS' && ([m
+[31m-          <details className="mt-2">[m
+[31m-            <summary className="cursor-pointer">Ver texto de las Letanías</summary>[m
+[31m-            <div className="prose prose-invert max-w-none text-sm mt-2">[m
+[31m-              <p><strong>Señor, ten piedad…</strong> (estructura como en tu texto; puedes pegar aquí el listado completo).</p>[m
+[31m-            </div>[m
+[31m-          </details>[m
+[31m-        )}[m
+[32m+[m[32m      {/* Instrucciones por fase */}[m
+[32m+[m[32m      <div className="card mb-4">[m
+[32m+[m[32m        {phase === 'INTRO' && <p>Oraciones iniciales…</p>}[m
+[32m+[m[32m        {phase === 'ANNOUNCE_1' && <p>Anunciando primer misterio…</p>}[m
+[32m+[m[32m        {phase === 'PN_USER' && <p><b>Tu parte:</b> Padre Nuestro (tu mitad). Luego la app responde.</p>}[m
+[32m+[m[32m        {phase === 'AVE_USER' && <p><b>Tu parte:</b> Ave María (tu mitad). La app responde “Santa María…” (Conteo: {aveCount}/10)</p>}[m
+[32m+[m[32m        {phase === 'GLORIA_BLOCK' && <p>Gloria… María Madre de gracia… Oh Jesús mío…</p>}[m
+[32m+[m[32m        {phase === 'NEXT_DECADE' && <p>Podés avanzar al siguiente misterio.</p>}[m
+[32m+[m[32m        {phase === 'DONE' && <p><b>¡Rosario completo!</b></p>}[m
+[32m+[m[32m      </div>[m
+ [m
+[31m-        {step.kind === 'FIN' ? ([m
+[31m-          <div className="pt-2">[m
+[31m-            <p className="mb-3">🙏 Rosario completado. Que la Virgen María te acompañe siempre.</p>[m
+[31m-            <button className="btn btn-primary" onClick={()=>router.push('/')}>Volver al inicio</button>[m
+[31m-          </div>[m
+[31m-        ) : ([m
+[31m-          <div className="pt-2 flex gap-2">[m
+[31m-            <button className="btn btn-primary" onClick={handleAction}>[m
+[31m-              {step.kind === 'AVE' ? 'Responder AVE' : 'Continuar'}[m
+[31m-            </button>[m
+[31m-            <button className="btn" onClick={next}>Saltar</button>[m
+[31m-            <button className="btn" onClick={back}>Atrás</button>[m
+[31m-          </div>[m
+[31m-        )}[m
+[32m+[m[32m      {/* Controles mínimos para no quedar bloqueado si el STT falla */}[m
+[32m+[m[32m      <div className="flex gap-3">[m
+[32m+[m[32m        <button className="btn btn-secondary" onClick={() => recognition.start()}>Reactivar escucha</button>[m
+[32m+[m[32m        <button className="btn btn-primary" onClick={nextStep} disabled={busy}>[m
+[32m+[m[32m          {busy ? 'Reproduciendo…' : 'Continuar'}[m
+[32m+[m[32m        </button>[m
+       </div>[m
+[31m-    </div>[m
+[31m-  )[m
+[32m+[m[32m    </main>[m
+[32m+[m[32m  );[m
+ }[m
+[1mdiff --git a/src/lib/audio.ts b/src/lib/audio.ts[m
+[1mindex 0d7865f..0c4bbc6 100644[m
+[1m--- a/src/lib/audio.ts[m
+[1m+++ b/src/lib/audio.ts[m
+[36m@@ -2,66 +2,112 @@[m
+ class AudioSvc {[m
+   private ctx: AudioContext | null = null;[m
+   private bg: HTMLAudioElement | null = null;[m
+[31m-  private unlocked = false;[m
+[32m+[m
+[32m+[m[32m  private pauseRec?: () => Promise<void> | void;[m
+[32m+[m[32m  private resumeRec?: () => Promise<void> | void;[m
+[32m+[m[32m  private onLine?: (line: string | null) => void;[m
+[32m+[m
+[32m+[m[32m  initOnce = false;[m
+ [m
+   async init() {[m
+[32m+[m[32m    if (this.initOnce) return;[m
+[32m+[m[32m    this.initOnce = true;[m
+     try {[m
+       // @ts-ignore[m
+       const Ctx = window.AudioContext || window.webkitAudioContext;[m
+       if (Ctx && !this.ctx) this.ctx = new Ctx();[m
+[32m+[m
+       const unlock = () => {[m
+         try { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); } catch {}[m
+         document.removeEventListener('touchstart', unlock);[m
+         document.removeEventListener('click', unlock);[m
+[31m-        this.unlocked = true;[m
+       };[m
+       document.addEventListener('touchstart', unlock, { once: true });[m
+       document.addEventListener('click', unlock, { once: true });[m
+     } catch {}[m
+   }[m
+ [m
+[31m-  /** TTS si hay; si no, MP3. Devuelve PROMESA que se resuelve cuando termina. */[m
+[31m-  sayOrPlay(text: string, mp3Url: string): Promise<void> {[m
+[32m+[m[32m  setRecognitionHooks(hooks: { pause?: () => Promise<void> | void; resume?: () => Promise<void> | void }) {[m
+[32m+[m[32m    this.pauseRec = hooks.pause;[m
+[32m+[m[32m    this.resumeRec = hooks.resume;[m
+[32m+[m[32m  }[m
+[32m+[m[32m  setOnLine(fn: (line: string | null) => void) {[m
+[32m+[m[32m    this.onLine = fn;[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  private async speak(text: string): Promise<void> {[m
+[32m+[m[32m    // TTS robusto con timeout + voiceschanged[m
+[32m+[m[32m    if (!('speechSynthesis' in window)) throw new Error('no-tts');[m
+[32m+[m
+[32m+[m[32m    const u = new SpeechSynthesisUtterance(text);[m
+[32m+[m[32m    u.lang = 'es-ES';[m
+[32m+[m
+[32m+[m[32m    const pick = () => {[m
+[32m+[m[32m      const vs = speechSynthesis.getVoices();[m
+[32m+[m[32m      const v = vs.find(v => (v.lang || '').toLowerCase().startsWith('es')) || vs[0];[m
+[32m+[m[32m      if (v) u.voice = v;[m
+[32m+[m[32m    };[m
+[32m+[m[32m    pick();[m
+[32m+[m[32m    if (!u.voice) {[m
+[32m+[m[32m      await new Promise<void>((res) => {[m
+[32m+[m[32m        const once = () => { pick(); speechSynthesis.removeEventListener('voiceschanged', once); res(); };[m
+[32m+[m[32m        speechSynthesis.addEventListener('voiceschanged', once, { once: true });[m
+[32m+[m[32m        // fallback por si nunca llega[m
+[32m+[m[32m        setTimeout(() => { try { speechSynthesis.removeEventListener('voiceschanged', once); } catch{}; res(); }, 1200);[m
+[32m+[m[32m      });[m
+[32m+[m[32m      pick();[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    try { speechSynthesis.cancel(); } catch {}[m
+     return new Promise<void>((resolve) => {[m
+[31m-      // Preferir TTS[m
+[31m-      try {[m
+[31m-        if ('speechSynthesis' in window) {[m
+[31m-          const u = new SpeechSynthesisUtterance(text);[m
+[31m-          u.lang = 'es-ES';[m
+[31m-          const voices = speechSynthesis.getVoices();[m
+[31m-          const v = voices.find(v => (v.lang || '').toLowerCase().startsWith('es'));[m
+[31m-          if (v) u.voice = v;[m
+[31m-          try { speechSynthesis.cancel(); } catch {}[m
+[31m-          u.onend = () => resolve();[m
+[31m-          u.onerror = () => resolve();[m
+[31m-          speechSynthesis.speak(u);[m
+[31m-          return;[m
+[31m-        }[m
+[31m-      } catch {[m
+[31m-        /* caer a MP3 */[m
+[31m-      }[m
+[31m-      // Fallback MP3[m
+[31m-      const a = new Audio(mp3Url);[m
+[31m-      const done = () => resolve();[m
+[31m-      a.addEventListener('ended', done, { once: true });[m
+[31m-      a.addEventListener('error', done, { once: true });[m
+[31m-      // Timeout de seguridad por si el archivo no se puede reproducir[m
+[31m-      setTimeout(done, 12000);[m
+[31m-      a.play().catch(done);[m
+[32m+[m[32m      let done = false;[m
+[32m+[m[32m      const finish = () => { if (done) return; done = true; resolve(); };[m
+[32m+[m[32m      u.onend = finish;[m
+[32m+[m[32m      u.onerror = finish;[m
+[32m+[m[32m      speechSynthesis.speak(u);[m
+[32m+[m[32m      // salvavidas[m
+[32m+[m[32m      setTimeout(finish, Math.max(2000, Math.min(20000, 250 * (text?.length || 0))));[m
+     });[m
+   }[m
+ [m
+[31m-  play(mp3Url: string): Promise<void> {[m
+[32m+[m[32m  private async playMp3(url: string): Promise<void> {[m
+[32m+[m[32m    if (!url) throw new Error('empty-mp3');[m
+     return new Promise<void>((resolve) => {[m
+[31m-      const a = new Audio(mp3Url);[m
+[31m-      const done = () => resolve();[m
+[31m-      a.addEventListener('ended', done, { once: true });[m
+[31m-      a.addEventListener('error', done, { once: true });[m
+[31m-      setTimeout(done, 12000);[m
+[31m-      a.play().catch(done);[m
+[32m+[m[32m      const a = new Audio(url);[m
+[32m+[m[32m      let done = false;[m
+[32m+[m[32m      const finish = () => { if (done) return; done = true; resolve(); };[m
+[32m+[m[32m      a.addEventListener('ended', finish, { once: true });[m
+[32m+[m[32m      a.addEventListener('error', finish, { once: true });[m
+[32m+[m[32m      setTimeout(finish, 15000);[m
+[32m+[m[32m      a.play().catch(finish);[m
+     });[m
+   }[m
+ [m
+[32m+[m[32m  /** Muestra línea en UI + pausa STT + TTS o MP3 + reanuda STT. SIEMPRE RESUELVE. */[m
+[32m+[m[32m  async sayOrPlay(text: string, mp3Url?: string): Promise<void> {[m
+[32m+[m[32m    try { await this.pauseRec?.(); } catch {}[m
+[32m+[m[32m    if (this.onLine && text) this.onLine(text);[m
+[32m+[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      try {[m
+[32m+[m[32m        await this.speak(text || '');[m
+[32m+[m[32m      } catch {[m
+[32m+[m[32m        if (mp3Url) await this.playMp3(mp3Url);[m
+[32m+[m[32m      }[m
+[32m+[m[32m    } catch {[m
+[32m+[m[32m      // ignorar[m
+[32m+[m[32m    } finally {[m
+[32m+[m[32m      if (this.onLine) this.onLine(null);[m
+[32m+[m[32m      try { await this.resumeRec?.(); } catch {}[m
+[32m+[m[32m    }[m
+[32m+[m[32m  }[m
+[32m+[m
+[32m+[m[32m  async play(url: string): Promise<void> {[m
+[32m+[m[32m    try { await this.pauseRec?.(); } catch {}[m
+[32m+[m[32m    try { await this.playMp3(url); } catch {}[m[41m [m
+[32m+[m[32m    finally { try { await this.resumeRec?.(); } catch {} }[m
+[32m+[m[32m  }[m
+[32m+[m
+   setGregorian(on: boolean) {[m
+     const url = '/audio/gregoriano/loop.mp3';[m
+     if (on) {[m
+[36m@@ -71,8 +117,8 @@[m [mclass AudioSvc {[m
+         this.bg.volume = 0.25;[m
+       }[m
+       this.bg.play().catch(() => {});[m
+[31m-    } else {[m
+[31m-      if (this.bg) { try { this.bg.pause(); this.bg.currentTime = 0; } catch {} }[m
+[32m+[m[32m    } else if (this.bg) {[m
+[32m+[m[32m      try { this.bg.pause(); this.bg.currentTime = 0; } catch {}[m
+     }[m
+   }[m
+ }[m
+[1mdiff --git a/src/lib/recognition.ts b/src/lib/recognition.ts[m
+[1mindex 8cb189f..9ca8787 100644[m
+[1m--- a/src/lib/recognition.ts[m
+[1m+++ b/src/lib/recognition.ts[m
+[36m@@ -1,50 +1,66 @@[m
+ // src/lib/recognition.ts[m
+[31m-export type Recognizer = {[m
+[31m-  start: () => void[m
+[31m-  stop: () => void[m
+[31m-  isSupported: boolean[m
+[31m-}[m
+[32m+[m[32mtype Listener = (text: string) => void;[m
+ [m
+[31m-type OnHeard = (text: string) => void[m
+[32m+[m[32mclass RecognitionSvc {[m
+[32m+[m[32m  private rec: any = null;[m
+[32m+[m[32m  private active = false;[m
+[32m+[m[32m  private subs: Listener[] = [];[m
+ [m
+[31m-const KEYWORDS = {[m
+[31m-  // detecta que el usuario dijo su mitad (gatilla respuesta de la app)[m
+[31m-  aveMaria: [/dios te salve/i, /llena eres de gracia/i, /bendita tú eres/i],[m
+[31m-  padreNuestro: [/padre nuestro/i, /santificado sea tu nombre/i, /danos hoy/i],[m
+[31m-  gloria: [/gloria al padre/i, /como era en el principio/i],[m
+[31m-}[m
+[32m+[m[32m  async init() {[m
+[32m+[m[32m    if (this.rec) return;[m
+[32m+[m[32m    const w: any = window as any;[m
+[32m+[m[32m    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;[m
+[32m+[m[32m    if (!SR) return;[m
+[32m+[m[32m    const r = new SR();[m
+[32m+[m[32m    r.lang = 'es-ES';[m
+[32m+[m[32m    r.continuous = true;[m
+[32m+[m[32m    r.interimResults = true;[m
+[32m+[m
+[32m+[m[32m    r.onresult = (e: any) => {[m
+[32m+[m[32m      const last = e.results[e.results.length - 1];[m
+[32m+[m[32m      const txt = (last[0]?.transcript || '').toLowerCase();[m
+[32m+[m[32m      this.subs.forEach(fn => fn(txt));[m
+[32m+[m[32m    };[m
+[32m+[m[32m    r.onend = () => { if (this.active) try { r.start(); } catch {} };[m
+ [m
+[31m-export function createRecognizer(onHeard: OnHeard): Recognizer {[m
+[31m-  const SR: any = (globalThis as any).SpeechRecognition || (globalThis as any).webkitSpeechRecognition[m
+[31m-  if (!SR) return { start(){}, stop(){}, isSupported: false }[m
+[31m-[m
+[31m-  const r = new SR()[m
+[31m-  r.lang = 'es-ES'[m
+[31m-  r.continuous = true[m
+[31m-  r.interimResults = false[m
+[31m-[m
+[31m-  r.onresult = (e: any) => {[m
+[31m-    for (let i = e.resultIndex; i < e.results.length; i++) {[m
+[31m-      const t = e.results[i][0].transcript?.trim() || ''[m
+[31m-      if (!t) continue[m
+[31m-      onHeard(t)[m
+[31m-    }[m
+[32m+[m[32m    this.rec = r;[m
+   }[m
+ [m
+[31m-  r.onerror = () => {/* silencio: seguimos con fallback botón */}[m
+[31m-  r.onend = () => { try { r.start() } catch {} } // auto-restart suave[m
+[32m+[m[32m  async start() {[m
+[32m+[m[32m    await this.init();[m
+[32m+[m[32m    if (!this.rec) return;[m
+[32m+[m[32m    this.active = true;[m
+[32m+[m[32m    try { this.rec.start(); } catch {}[m
+[32m+[m[32m  }[m
+ [m
+[31m-  return {[m
+[31m-    start: () => { try { r.start() } catch {} },[m
+[31m-    stop: () => { try { r.stop() } catch {} },[m
+[31m-    isSupported: true[m
+[32m+[m[32m  async stop() {[m
+[32m+[m[32m    if (!this.rec) return;[m
+[32m+[m[32m    this.active = false;[m
+[32m+[m[32m    try { this.rec.stop(); } catch {}[m
+   }[m
+[31m-}[m
+ [m
+[31m-export function classifyPrayer(text: string): 'AM'|'PN'|'GLORIA'|null {[m
+[31m-  const t = text.toLowerCase()[m
+[31m-  if (KEYWORDS.aveMaria.some(rx => rx.test(t))) return 'AM'[m
+[31m-  if (KEYWORDS.padreNuestro.some(rx => rx.test(t))) return 'PN'[m
+[31m-  if (KEYWORDS.gloria.some(rx => rx.test(t))) return 'GLORIA'[m
+[31m-  return null[m
+[32m+[m[32m  async pause() { await this.stop(); }[m
+[32m+[m[32m  async resume() { await this.start(); }[m
+[32m+[m
+[32m+[m[32m  on(fn: Listener) { this.subs.push(fn); return () => { this.subs = this.subs.filter(s => s !== fn); }; }[m
+[32m+[m
+[32m+[m[32m  /** Espera hasta que se detecte alguna de las palabras clave (o timeout). */[m
+[32m+[m[32m  async waitFor(keys: string[], ms = 15000): Promise<string | null> {[m
+[32m+[m[32m    let off = () => {};[m
+[32m+[m[32m    try {[m
+[32m+[m[32m      const hit = await new Promise<string | null>((resolve) => {[m
+[32m+[m[32m        const t = setTimeout(() => { off(); resolve(null); }, ms);[m
+[32m+[m[32m        off = this.on((txt) => {[m
+[32m+[m[32m          for (const k of keys) {[m
+[32m+[m[32m            if (txt.includes(k.toLowerCase())) {[m
+[32m+[m[32m              clearTimeout(t); off(); resolve(k); return;[m
+[32m+[m[32m            }[m
+[32m+[m[32m          }[m
+[32m+[m[32m        });[m
+[32m+[m[32m      });[m
+[32m+[m[32m      return hit;[m
+[32m+[m[32m    } catch { off(); return null; }[m
+[32m+[m[32m  }[m
+ }[m
+[32m+[m
+[32m+[m[32mexport const recognition = new RecognitionSvc();[m

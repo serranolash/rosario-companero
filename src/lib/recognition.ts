@@ -1,50 +1,66 @@
 // src/lib/recognition.ts
-export type Recognizer = {
-  start: () => void
-  stop: () => void
-  isSupported: boolean
-}
+type Listener = (text: string) => void;
 
-type OnHeard = (text: string) => void
+class RecognitionSvc {
+  private rec: any = null;
+  private active = false;
+  private subs: Listener[] = [];
 
-const KEYWORDS = {
-  // detecta que el usuario dijo su mitad (gatilla respuesta de la app)
-  aveMaria: [/dios te salve/i, /llena eres de gracia/i, /bendita tú eres/i],
-  padreNuestro: [/padre nuestro/i, /santificado sea tu nombre/i, /danos hoy/i],
-  gloria: [/gloria al padre/i, /como era en el principio/i],
-}
+  async init() {
+    if (this.rec) return;
+    const w: any = window as any;
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SR) return;
+    const r = new SR();
+    r.lang = 'es-ES';
+    r.continuous = true;
+    r.interimResults = true;
 
-export function createRecognizer(onHeard: OnHeard): Recognizer {
-  const SR: any = (globalThis as any).SpeechRecognition || (globalThis as any).webkitSpeechRecognition
-  if (!SR) return { start(){}, stop(){}, isSupported: false }
+    r.onresult = (e: any) => {
+      const last = e.results[e.results.length - 1];
+      const txt = (last[0]?.transcript || '').toLowerCase();
+      this.subs.forEach(fn => fn(txt));
+    };
+    r.onend = () => { if (this.active) try { r.start(); } catch {} };
 
-  const r = new SR()
-  r.lang = 'es-ES'
-  r.continuous = true
-  r.interimResults = false
-
-  r.onresult = (e: any) => {
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const t = e.results[i][0].transcript?.trim() || ''
-      if (!t) continue
-      onHeard(t)
-    }
+    this.rec = r;
   }
 
-  r.onerror = () => {/* silencio: seguimos con fallback botón */}
-  r.onend = () => { try { r.start() } catch {} } // auto-restart suave
+  async start() {
+    await this.init();
+    if (!this.rec) return;
+    this.active = true;
+    try { this.rec.start(); } catch {}
+  }
 
-  return {
-    start: () => { try { r.start() } catch {} },
-    stop: () => { try { r.stop() } catch {} },
-    isSupported: true
+  async stop() {
+    if (!this.rec) return;
+    this.active = false;
+    try { this.rec.stop(); } catch {}
+  }
+
+  async pause() { await this.stop(); }
+  async resume() { await this.start(); }
+
+  on(fn: Listener) { this.subs.push(fn); return () => { this.subs = this.subs.filter(s => s !== fn); }; }
+
+  /** Espera hasta que se detecte alguna de las palabras clave (o timeout). */
+  async waitFor(keys: string[], ms = 15000): Promise<string | null> {
+    let off = () => {};
+    try {
+      const hit = await new Promise<string | null>((resolve) => {
+        const t = setTimeout(() => { off(); resolve(null); }, ms);
+        off = this.on((txt) => {
+          for (const k of keys) {
+            if (txt.includes(k.toLowerCase())) {
+              clearTimeout(t); off(); resolve(k); return;
+            }
+          }
+        });
+      });
+      return hit;
+    } catch { off(); return null; }
   }
 }
 
-export function classifyPrayer(text: string): 'AM'|'PN'|'GLORIA'|null {
-  const t = text.toLowerCase()
-  if (KEYWORDS.aveMaria.some(rx => rx.test(t))) return 'AM'
-  if (KEYWORDS.padreNuestro.some(rx => rx.test(t))) return 'PN'
-  if (KEYWORDS.gloria.some(rx => rx.test(t))) return 'GLORIA'
-  return null
-}
+export const recognition = new RecognitionSvc();
