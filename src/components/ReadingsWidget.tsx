@@ -38,8 +38,41 @@ export default function ReadingsWidget() {
   if (!html) return <div className="card">Cargando lecturas…</div>
 
   return (
-    <div className="card prose prose-invert max-w-none">
-      <div dangerouslySetInnerHTML={{ __html: html }} />
+    <div className="card">
+      {/* Contenedor con reglas que doman tamaños y ocultan ruido */}
+      <div className="lecturas-container prose max-w-none prose-invert">
+        <div dangerouslySetInnerHTML={{ __html: html }} />
+      </div>
+
+      {/* Estilos acotados al contenedor */}
+      <style jsx global>{`
+        .lecturas-container img,
+        .lecturas-container svg,
+        .lecturas-container iframe {
+          max-width: 100% !important;
+          height: auto !important;
+        }
+        .lecturas-container .icon,
+        .lecturas-container .icons,
+        .lecturas-container .social,
+        .lecturas-container .share,
+        .lecturas-container .banner,
+        .lecturas-container .menu,
+        .lecturas-container .navbar {
+          display: none !important;
+          visibility: hidden !important;
+        }
+        .lecturas-container a {
+          text-decoration: underline;
+        }
+        /* Asegura tipografía legible si vienen estilos propios */
+        .lecturas-container h1, .lecturas-container h2, .lecturas-container h3 {
+          margin-top: 0.75rem;
+          margin-bottom: 0.5rem;
+          line-height: 1.3;
+        }
+        .lecturas-container p { margin: 0.5rem 0; }
+      `}</style>
     </div>
   )
 }
