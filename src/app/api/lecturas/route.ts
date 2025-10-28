@@ -53,32 +53,40 @@ function decodeEntities(s: string) {
 function htmlToPlain(html: string) {
   let h = html
 
-  // --- 1️⃣ Conservamos los encabezados como títulos (separados por saltos) ---
-  h = h
-    .replace(/<\/h[1-6]>/gi, '\n\n')
-    .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, (_, text) => `\n\n🕊️ ${text.toUpperCase()}\n\n`)
+  // 1️⃣ Eliminar bloques de script, style y comentarios
+  h = h.replace(/<script[\s\S]*?<\/script>/gi, '')
+  h = h.replace(/<style[\s\S]*?<\/style>/gi, '')
+  h = h.replace(/<!--[\s\S]*?-->/g, '')
 
-  // --- 2️⃣ Convertimos listas en texto claro ---
-  h = h.replace(/<\/li>\s*/gi, '\n').replace(/<li[^>]*>/gi, '• ')
+  // 2️⃣ Eliminar todas las etiquetas <font>, <span> y sus atributos
+  h = h.replace(/<\/?font[^>]*>/gi, '')
+  h = h.replace(/<\/?span[^>]*>/gi, '')
 
-  // --- 3️⃣ Reemplazamos <p> por párrafos normales ---
-  h = h.replace(/<\/p>\s*/gi, '\n\n').replace(/<p[^>]*>/gi, '')
+  // 3️⃣ Convertir encabezados en títulos destacados
+  h = h.replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, (_, text) => `\n\n🕊️ ${text.toUpperCase()}\n\n`)
 
-  // --- 4️⃣ Reemplazamos <br> SOLO si hay 2 seguidos (para separar bloques) ---
-  h = h.replace(/(<br\s*\/?>\s*){2,}/gi, '\n\n') // 2 o más br = salto de párrafo
-  h = h.replace(/<br\s*\/?>/gi, ' ') // un solo br = espacio
+  // 4️⃣ Convertir listas en viñetas limpias
+  h = h.replace(/<\/li>\s*/gi, '\n')
+  h = h.replace(/<li[^>]*>/gi, '• ')
 
-  // --- 5️⃣ Quitamos el resto de etiquetas ---
+  // 5️⃣ Quitar el resto de etiquetas, manteniendo párrafos y br
+  h = h.replace(/<\/p>\s*/gi, '\n\n')
+  h = h.replace(/<p[^>]*>/gi, '')
+  h = h.replace(/(<br\s*\/?>\s*){2,}/gi, '\n\n') // 2 o más <br> → salto de párrafo
+  h = h.replace(/<br\s*\/?>/gi, ' ') // 1 solo <br> → espacio
+
+  // 6️⃣ Eliminar cualquier otra etiqueta HTML que quede
   h = h.replace(/<\/?[^>]+>/g, '')
 
-  // --- 6️⃣ Decodificamos entidades HTML comunes ---
+  // 7️⃣ Decodificar entidades HTML
   h = decodeEntities(h)
 
-  // --- 7️⃣ Normalizamos espacios y saltos ---
+  // 8️⃣ Limpiar líneas y espacios dobles
   h = h.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
 
   return h
 }
+
 
 
 type EKey = 'FR'|'PS'|'SR'|'GSP'
