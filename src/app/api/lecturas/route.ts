@@ -51,24 +51,35 @@ function decodeEntities(s: string) {
 
 // quita etiquetas HTML dejando texto y saltos
 function htmlToPlain(html: string) {
-  // mantener títulos <h1..h4> como líneas con saltos antes/después
   let h = html
-    .replace(/<\/h[1-6]>/gi, '\n')
-    .replace(/<h[1-6][^>]*>/gi, '\n')
-  // listas → líneas
+
+  // --- 1️⃣ Conservamos los encabezados como títulos (separados por saltos) ---
+  h = h
+    .replace(/<\/h[1-6]>/gi, '\n\n')
+    .replace(/<h[1-6][^>]*>(.*?)<\/h[1-6]>/gi, (_, text) => `\n\n🕊️ ${text.toUpperCase()}\n\n`)
+
+  // --- 2️⃣ Convertimos listas en texto claro ---
   h = h.replace(/<\/li>\s*/gi, '\n').replace(/<li[^>]*>/gi, '• ')
-  // párrafos → saltos
+
+  // --- 3️⃣ Reemplazamos <p> por párrafos normales ---
   h = h.replace(/<\/p>\s*/gi, '\n\n').replace(/<p[^>]*>/gi, '')
-  // reemplazar <br> por \n
-  h = replaceBrWithNewline(h)
-  // quitar el resto de tags
+
+  // --- 4️⃣ Reemplazamos <br> SOLO si hay 2 seguidos (para separar bloques) ---
+  h = h.replace(/(<br\s*\/?>\s*){2,}/gi, '\n\n') // 2 o más br = salto de párrafo
+  h = h.replace(/<br\s*\/?>/gi, ' ') // un solo br = espacio
+
+  // --- 5️⃣ Quitamos el resto de etiquetas ---
   h = h.replace(/<\/?[^>]+>/g, '')
-  // decodificar entidades
+
+  // --- 6️⃣ Decodificamos entidades HTML comunes ---
   h = decodeEntities(h)
-  // normalizar espacios/saltos
+
+  // --- 7️⃣ Normalizamos espacios y saltos ---
   h = h.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+
   return h
 }
+
 
 type EKey = 'FR'|'PS'|'SR'|'GSP'
 
