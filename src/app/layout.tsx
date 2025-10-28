@@ -15,13 +15,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ThemeProvider>
           <main className="mx-auto w-full max-w-2xl px-5 py-8">
-            <header className="mb-6 flex items-center gap-3">
-              <img src="/images/virgen.png" alt="Virgen María" className="h-10 w-10 rounded-xl border border-[var(--color-border)] bg-white p-1" />
+            {/* Header con imagen @2x, halo y tipografía */}
+            <header className="flex items-center gap-4 mb-6">
+              <div className="relative">
+                {/* Imagen de la Virgen */}
+                <img
+                  src="/images/virgen@2x.png"
+                  alt="Virgen María"
+                  className="w-[64px] h-[64px] md:w-[80px] md:h-[80px] rounded-2xl object-cover shadow-lg ring-2 ring-[#e8b923]/70"
+                />
+                {/* Halo sutil */}
+                <span className="pointer-events-none absolute inset-0 rounded-2xl ring-8 ring-[#e8b923]/12"></span>
+              </div>
+
               <div>
-                <h1 className="text-3xl font-extrabold tracking-tight text-slate-800">Rosario Compañero</h1>
-                <p className="text-sm text-slate-500">Aplicación para rezar el Santo Rosario</p>
+                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-800">
+                  Rosario Compañero
+                </h1>
+                <p className="text-slate-500 -mt-0.5">
+                  Aplicación para rezar el Santo Rosario
+                </p>
               </div>
             </header>
+
             {children}
           </main>
         </ThemeProvider>

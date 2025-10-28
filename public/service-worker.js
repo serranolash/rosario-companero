@@ -9,7 +9,7 @@ if (self.workbox) {
   const { CacheableResponsePlugin } = workbox.cacheableResponse;
   const { setCacheNameDetails } = workbox.core;
 
-  setCacheNameDetails({ prefix: 'rosario-companero-v2' });
+  setCacheNameDetails({ prefix: 'rosario-companero-v7' });
 
   registerRoute(({ request }) => request.destination === 'image',
     new StaleWhileRevalidate({ cacheName:'images',

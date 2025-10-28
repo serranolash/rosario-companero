@@ -2,29 +2,25 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { guessMysteryIdByLocalDate } from '@/lib/day-mysteries'
-import mysteriesData from '@/data/mysteries.es.json'
-import { MysteryCard } from '@/components/MysteryCard'
+import MysteryCard from '@/components/MysteryCard'
+import { getTodayMystery, dayLabelForToday } from '@/lib/day-mysteries'
 import { load } from '@/lib/storage'
 import { registerSW } from '@/lib/pwa'
-
-type Myst = (typeof mysteriesData)[number]
 
 export default function Page() {
   const [mounted, setMounted] = useState(false)
   const [count, setCount] = useState<number>(0)
-  const [todays, setTodays] = useState<Myst | null>(null)
+
+  // Datos del misterio del día (sincrónicos)
+  const mystery = getTodayMystery() // { id, title }
+  const labelDelDia = dayLabelForToday() // ej: "martes / viernes"
 
   useEffect(() => {
     // PWA
     registerSW?.()
 
     const c = Number(load('rosary:count', 0)) || 0
-    const id = guessMysteryIdByLocalDate(new Date())
-    const m = (mysteriesData as any).find((x: any) => x.id === id) as Myst | undefined
-
     setCount(c)
-    setTodays(m ?? null)
     setMounted(true)
   }, [])
 
@@ -51,13 +47,13 @@ export default function Page() {
     <main className="mx-auto max-w-2xl px-4 py-8 space-y-6">
       <section className="space-y-2">
         <span className="badge">Misterio del día</span>
-        {todays && (
-          <MysteryCard
-            title={todays.title}
-            subtitle={`Hoy: ${todays.days.join(' / ')}`}
-            img={`/images/misterios/${todays.id}.png`}
-          />
-        )}
+
+        {/* ✅ Uso del componente y helpers correctos */}
+        <MysteryCard
+          id={mystery.id}                               // 'dolorosos' | 'gozosos' | 'gloriosos' | 'luminosos'
+          title={`Misterios ${mystery.title}`}          // ej: "Misterios Dolorosos"
+          todayLabel={`Hoy: ${labelDelDia}`}            // ej: "Hoy: martes / viernes"
+        />
       </section>
 
       <section className="card space-y-4">
@@ -69,7 +65,7 @@ export default function Page() {
             Guía de Misterios
           </Link>
 
-          {/* Nuevo botón a /lecturas */}
+          {/* Botón a /lecturas */}
           <Link href="/lecturas" className="btn btn-secondary w-full text-center">
             Evangelio y lecturas de hoy
           </Link>
