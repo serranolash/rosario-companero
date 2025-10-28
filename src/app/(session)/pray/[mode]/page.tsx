@@ -10,15 +10,14 @@ import mysteriesData from '@/data/mysteries.es.json' // { id, title, days, decad
    Tipos y fases del flujo
    ======================= */
 type Phase =
+  | 'IDLE'           // antes de iniciar sesión
   | 'INTRO'
-  | 'ANNOUNCE_1'
-  | 'PN_USER'
-  | 'AVE_USER'
-  | 'GLORIA_BLOCK'
-  | 'NEXT_DECADE'
+  | 'ANNOUNCE'
+  | 'RUNNING'
   | 'DONE'
 
 const MAX_DECADES = 5
+const autoHandsFree = true // ← activar modo manos libres
 
 /* =======================
    A) Normalización por title (con fallback)
@@ -26,7 +25,6 @@ const MAX_DECADES = 5
 type Decade = { title: string; desc?: string; img?: string }
 type MysteryGroup = { id: string; title: string; days: string[]; decades?: Decade[] }
 
-// Títulos de respaldo si el JSON no trae "decades"
 const FALLBACK_DECADES: Record<string, string[]> = {
   Gozosos: [
     'La Encarnación del Hijo de Dios',
@@ -70,7 +68,7 @@ function normalizeMysteries(
   })) as any
 }
 
-/* ===== Helper para determinar el grupo de hoy por título ===== */
+/* ===== Helper: grupo del día por título ===== */
 function todayMysteryGroup() {
   const d = new Date().getDay() // 0=domingo
   // lun/sab Gozosos, mar/vie Dolorosos, mie/dom Gloriosos, jue Luminosos
@@ -79,47 +77,38 @@ function todayMysteryGroup() {
   if (d === 3 || d === 0) return 'Gloriosos'
   return 'Luminosos'
 }
-
-/* ======= Utilidades varias ======= */
 function ordinal(n: number) {
   return ['Primer', 'Segundo', 'Tercer', 'Cuarto', 'Quinto'][n - 1] || `${n}º`
 }
 
 /* =======================
-   Espera “humana” del turno del feligrés (usa tu RecognitionSvc.listen)
+   Espera del turno del feligrés (hands-free)
    ======================= */
-async function waitUserPrayerTurn(
-  kind: 'padre_nuestro' | 'ave_maria' | 'gloria',
-) {
-  // Pequeña gracia antes de activar micro
+async function waitUser(kind: 'pn' | 'ave' | 'gloria') {
+  if (!autoHandsFree) return
+  // pequeña pausa natural antes de activar mic
   await new Promise((r) => setTimeout(r, 300))
-
-  try {
-    const heard = await recognition.listen({
-      lang: 'es-AR', // o 'es-ES'
-      minDurationMs: 2500,
-      endSilenceMs: 1200,
-      minChars: 15,
-      maxTotalMs: 20000,
-    })
-    // console.log(`[Reconocimiento ${kind}]:`, heard)
-    return heard?.trim() ?? ''
-  } catch {
-    return ''
-  }
+  await recognition.listen({
+    lang: 'es-AR',       // o 'es-ES'
+    minDurationMs: 2800, // un poco más pausado
+    endSilenceMs: 1400,
+    minChars: 20,
+    maxTotalMs: 22000,
+  })
 }
 
 /* =======================
    Componente principal
    ======================= */
 export default function PrayPage() {
-  const [phase, setPhase] = useState<Phase>('INTRO')
+  const [phase, setPhase] = useState<Phase>('IDLE')
   const [decadeIdx, setDecadeIdx] = useState(0)
   const [aveCount, setAveCount] = useState(0)
   const [showLine, setShowLine] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [started, setStarted] = useState(false)
 
-  // A) Computar por title (no por group)
+  // Grupo y misterios del día
   const groupTitle = useMemo(() => todayMysteryGroup(), [])
   const mysteries = useMemo(() => normalizeMysteries(mysteriesData as any), [])
   const mystery = useMemo(
@@ -131,184 +120,115 @@ export default function PrayPage() {
     [mystery, decadeIdx],
   )
 
-  // Conecta audio con “línea” visible; NO usamos pause/resume del recognizer (no existen)
+  // Preparar audio: mostrar línea del texto hablado
   useEffect(() => {
-    audio.init()
-    // hacemos que el audio pueda “limpiar/ocultar” la línea cuando termina
-    audio.setOnLine((l) => setShowLine(l))
-    runIntro()
+    audio.init?.()
+    audio.setOnLine?.((l) => setShowLine(l))
     return () => {
-      // por si queda algo escuchando, lo detenemos
-      try {
-        recognition.stop()
-      } catch {}
+      try { recognition.stop() } catch {}
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   /* =======================
-     Intro completa y pase a PN_USER
+     Orquestadores de sesión
      ======================= */
-  async function runIntro() {
-    setBusy(true)
+
+  // Arranca 5 decenas (rosario completo)
+  async function startSessionFull() {
+    if (started) return
+    setStarted(true)
     setPhase('INTRO')
+
     try {
-      await audio.sayOrPlay(
-        prayers.por_la_senal,
-        '/audio/intro/por-la-senal.mp3',
-      )
-      await audio.sayOrPlay(
-        prayers.acto_contricion,
-        '/audio/intro/acto-contricion.mp3',
-      )
-      await audio.sayOrPlay(
-        prayers.abre_labios.peticion,
-        '/audio/intro/abre-labios-p.mp3',
-      )
-      await audio.sayOrPlay(
-        prayers.abre_labios.respuesta,
-        '/audio/intro/abre-labios-r.mp3',
-      )
-      await audio.sayOrPlay(
-        prayers.ven_auxilio.peticion,
-        '/audio/intro/ven-auxilio-p.mp3',
-      )
-      await audio.sayOrPlay(
-        prayers.ven_auxilio.respuesta,
-        '/audio/intro/ven-auxilio-r.mp3',
-      )
-      await audio.sayOrPlay(prayers.gloria.parte1, '/audio/gloria/parte1.mp3')
-      await audio.sayOrPlay(prayers.gloria.parte2, '/audio/gloria/parte2.mp3')
-    } catch {
-      /* ignorar */
-    } finally {
-      setBusy(false)
-      // Anunciar misterio 1
-      setPhase('ANNOUNCE_1')
-      setTimeout(announceFirst, 100)
+      // 1) Desbloquear audio + pedir mic 1 sola vez
+      await audio.init?.()
+      await recognition.prepare()
+
+      // 2) (Opcional) Intro abreviada
+      try {
+        await audio.sayOrPlay(prayers.por_la_senal, '/audio/intro/por-la-senal.mp3')
+        await audio.sayOrPlay(prayers.acto_contricion, '/audio/intro/acto-contricion.mp3')
+        await audio.sayOrPlay(prayers.gloria.parte1, '/audio/gloria/parte1.mp3')
+        await audio.sayOrPlay(prayers.gloria.parte2, '/audio/gloria/parte2.mp3')
+      } catch {}
+
+      // 3) 5 decenas
+      setPhase('RUNNING')
+      for (let d = 0; d < MAX_DECADES; d++) {
+        await runDecade(d)
+      }
+
+      // 4) Final (opcional)
+      // await audio.sayOrPlay('Salve...', '/audio/final/salve.mp3')
+
+      setPhase('DONE')
+    } catch (e) {
+      console.error('Error en la sesión completa:', e)
+      setPhase('DONE')
     }
   }
 
-  async function announceFirst() {
-    if (!mystery || !decade) {
-      setPhase('PN_USER')
-      return
+  // Arranca 1 sola decena (la actual)
+  async function startSessionSingle() {
+    if (started) return
+    setStarted(true)
+    setPhase('INTRO')
+
+    try {
+      await audio.init?.()
+      await recognition.prepare()
+
+      setPhase('RUNNING')
+      await runDecade(0)
+
+      setPhase('DONE')
+    } catch (e) {
+      console.error('Error en la sesión de una decena:', e)
+      setPhase('DONE')
     }
-    setBusy(true)
+  }
+
+  // Ejecuta una decena completa, con anuncio + PN + 10 AVE + Gloria
+  async function runDecade(idx: number) {
+    setDecadeIdx(idx)
+    setAveCount(0)
+
+    // Anuncio del misterio
+    const title = mystery?.title || ''
+    const dTitle = mystery?.decades?.[idx]?.title || ''
+    setPhase('ANNOUNCE')
     try {
       await audio.sayOrPlay(
-        `Primer misterio ${mystery.title}: ${decade.title}.`,
-        '/audio/misterios/announce-1.mp3',
+        `${ordinal(idx + 1)} misterio ${title}: ${dTitle}.`,
+        '/audio/misterios/announce.mp3',
       )
     } catch {}
-    finally {
-      setBusy(false)
-      setPhase('PN_USER')
-    }
-  }
 
-  /* =======================
-     Turnos del feligrés → respuesta de la app
-     ======================= */
-  async function runPadreNuestroUserThenApp() {
-    // Espera del usuario (no bloquea si no dice nada)
-    await waitUserPrayerTurn('padre_nuestro')
-    // Respuesta de la app
+    // Padre Nuestro: usuario → app
+    await waitUser('pn')
     await audio.sayOrPlay(
       prayers.padre_nuestro.parte2,
       '/audio/padre-nuestro/parte2.mp3',
     )
-    setPhase('AVE_USER')
-    setAveCount(0)
-  }
 
-  async function runAveMariaUserThenApp() {
-    await waitUserPrayerTurn('ave_maria')
-    await audio.sayOrPlay(
-      prayers.ave_maria.parte2,
-      '/audio/ave-maria/parte2.mp3',
-    )
-    const n = aveCount + 1
-    setAveCount(n)
-    if (n >= 10) {
-      setPhase('GLORIA_BLOCK')
-      runGloriaBlock()
-    } else {
-      setPhase('AVE_USER') // siguiente AVE
-    }
-  }
-
-  /* =======================
-     B) Bloque Gloria con claves seguras + fallback
-     ======================= */
-  async function runGloriaBlock() {
-    setBusy(true)
-    try {
-      // (Si quisieras “esperar” el turno del usuario para el Gloria, descomenta)
-      // await waitUserPrayerTurn('gloria')
-      await audio.sayOrPlay(prayers.gloria.parte1, '/audio/gloria/parte1.mp3')
-      await audio.sayOrPlay(prayers.gloria.parte2, '/audio/gloria/parte2.mp3')
-
-      const madre =
-        (prayers as any)['maria_madre_de_gracia'] ||
-        'María, Madre de gracia, Madre de misericordia. Defiéndenos de nuestros enemigos y ampáranos ahora y en la hora de nuestra muerte. Amén.'
-
-      const oh =
-        (prayers as any)['oh_jesus_mio'] ||
-        'Oh Jesús mío, perdónanos, líbranos del fuego del infierno y lleva a todas las almas al cielo, especialmente a las más necesitadas.'
-
-      await audio.sayOrPlay(madre, '/audio/extras/maria-madre.mp3')
-      await audio.sayOrPlay(oh, '/audio/extras/oh-jesus-mio.mp3')
-    } catch {
-      /* ignore */
-    } finally {
-      setBusy(false)
-      setPhase('NEXT_DECADE')
-    }
-  }
-
-  /* =======================
-     Control manual (botón “Continuar”)
-     ======================= */
-  const nextStep = async () => {
-    if (busy) return
-
-    if (phase === 'PN_USER') {
-      await runPadreNuestroUserThenApp()
-      return
+    // 10 Ave Marías: usuario → app
+    for (let i = 0; i < 10; i++) {
+      setAveCount(i)
+      await waitUser('ave')
+      await audio.sayOrPlay(
+        prayers.ave_maria.parte2,
+        '/audio/ave-maria/parte2.mp3',
+      )
+      setAveCount(i + 1)
     }
 
-    if (phase === 'AVE_USER') {
-      await runAveMariaUserThenApp()
-      return
-    }
+    // Gloria: usuario → app
+    await waitUser('gloria')
+    await audio.sayOrPlay(prayers.gloria.parte2, '/audio/gloria/parte2.mp3')
 
-    if (phase === 'GLORIA_BLOCK') {
-      // Se maneja dentro de runGloriaBlock()
-      return
-    }
-
-    if (phase === 'NEXT_DECADE') {
-      // Avanzar decena
-      const idx = decadeIdx + 1
-      if (idx >= MAX_DECADES) {
-        setPhase('DONE')
-        return
-      }
-      setDecadeIdx(idx)
-      setAveCount(0)
-      setPhase('ANNOUNCE_1')
-
-      // Anuncio del siguiente misterio
-      try {
-        await audio.sayOrPlay(
-          `${ordinal(idx + 1)} misterio ${mystery.title}: ${mystery.decades[idx].title}.`,
-          '/audio/misterios/announce-next.mp3',
-        )
-      } catch {}
-      setPhase('PN_USER')
-      return
-    }
+    // Opcionales (comentados si no tenés los audios)
+    // await audio.sayOrPlay(prayers.maria_madre_de_gracia, '/audio/extras/maria-madre.mp3')
+    // await audio.sayOrPlay(prayers.oh_jesus_mio, '/audio/extras/oh-jesus-mio.mp3')
   }
 
   /* =======================
@@ -323,7 +243,7 @@ export default function PrayPage() {
         <h1 className="text-2xl md:text-3xl font-extrabold">Rezo del Rosario</h1>
       </div>
 
-      {/* Línea visible cuando la app reza (intro o anuncios) */}
+      {/* Línea visible cuando la app reza (TTS / audio pregrabado) */}
       {showLine && (
         <div className="card mb-4">
           <p className="text-lg leading-relaxed">{showLine}</p>
@@ -331,13 +251,13 @@ export default function PrayPage() {
         </div>
       )}
 
-      {/* Estado actual */}
+      {/* Estado del día / progreso */}
       <div className="card mb-4">
         <p className="mb-2">
           <b>Misterio del día:</b> {mystery?.title}
         </p>
         <p className="mb-2">
-          <b>Decena:</b> {decadeIdx + 1} / 5
+          <b>Decena:</b> {Math.min(decadeIdx + 1, MAX_DECADES)} / {MAX_DECADES}
         </p>
         {decade && (
           <>
@@ -347,46 +267,58 @@ export default function PrayPage() {
             {decade.desc && <p className="muted mt-1">{decade.desc}</p>}
           </>
         )}
+        <p className="mt-2 text-sm text-gray-600">
+          Ave Marías de esta decena: {aveCount}/10
+        </p>
       </div>
 
-      {/* Instrucciones por fase */}
-      <div className="card mb-4">
-        {phase === 'INTRO' && <p>Oraciones iniciales…</p>}
-        {phase === 'ANNOUNCE_1' && <p>Anunciando primer misterio…</p>}
-        {phase === 'PN_USER' && (
-          <p>
-            <b>Tu parte:</b> Padre Nuestro (tu mitad). Luego la app responde.
+      {/* Pantalla de inicio (gesto único) */}
+      {!started && (
+        <div className="card mb-4">
+          <p className="mb-3">
+            Toca una opción para preparar audio y micrófono, y comenzar en modo manos libres:
           </p>
-        )}
-        {phase === 'AVE_USER' && (
-          <p>
-            <b>Tu parte:</b> Ave María (tu mitad). La app responde “Santa
-            María…” (Conteo: {aveCount}/10)
+          <div className="flex flex-wrap gap-3">
+            <button className="btn btn-primary" onClick={startSessionFull} disabled={busy}>
+              Rezar el rosario completo
+            </button>
+            <button className="btn" onClick={startSessionSingle} disabled={busy}>
+              Rezar una decena
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-gray-500">
+            * En móviles, el audio sólo se habilita tras un toque del usuario.
           </p>
-        )}
-        {phase === 'GLORIA_BLOCK' && (
-          <p>Gloria… María Madre de gracia… Oh Jesús mío…</p>
-        )}
-        {phase === 'NEXT_DECADE' && <p>Podés avanzar al siguiente misterio.</p>}
-        {phase === 'DONE' && <p><b>¡Rosario completo!</b></p>}
-      </div>
+        </div>
+      )}
 
-      {/* Controles mínimos para no quedar bloqueado si el STT falla */}
-      <div className="flex gap-3">
-        <button
-          className="btn btn-secondary"
-          onClick={() => {
-            try {
-              recognition.stop()
-            } catch {}
-          }}
-        >
-          Detener escucha
-        </button>
-        <button className="btn btn-primary" onClick={nextStep} disabled={busy}>
-          {busy ? 'Reproduciendo…' : 'Continuar'}
-        </button>
-      </div>
+      {/* Indicaciones según fase */}
+      {started && (
+        <div className="card mb-4">
+          {phase === 'INTRO' && <p>Preparando audio y micrófono…</p>}
+          {phase === 'ANNOUNCE' && <p>Anunciando el misterio…</p>}
+          {phase === 'RUNNING' && (
+            <p>
+              <b>Modo manos libres activo:</b> la app escucha tu mitad y responde automáticamente.
+            </p>
+          )}
+          {phase === 'DONE' && <p><b>¡Sesión finalizada!</b> Gracias por rezar.</p>}
+        </div>
+      )}
+
+      {/* Controles de seguridad / debug (sin “Responder”) */}
+      {started && (
+        <div className="flex gap-3">
+          <button
+            className="btn btn-secondary"
+            onClick={() => {
+              try { recognition.stop() } catch {}
+            }}
+          >
+            Detener escucha
+          </button>
+        </div>
+      )}
     </main>
   )
 }
