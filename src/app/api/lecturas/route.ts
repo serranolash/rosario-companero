@@ -42,6 +42,7 @@ function decodeEntities(s: string) {
     '&nbsp;': ' ',
     '&amp;': '&',
     '&quot;': '"',
+    '&#39': "'",
     '&#39;': "'",
     '&lt;': '<',
     '&gt;': '>'
@@ -87,7 +88,18 @@ function htmlToPlain(html: string) {
   return h
 }
 
-
+function cleanTitle(t: string) {
+  if (!t) return ''
+  // quitar tags problemáticos como <font>, <span>, etc.
+  let x = t.replace(/<\/?(font|span|div|p|em|strong|b|i)[^>]*>/gi, '')
+  // quitar cualquier etiqueta que quede
+  x = x.replace(/<\/?[^>]+>/g, '')
+  // decodificar entidades
+  x = decodeEntities(x)
+  // trim y espacios
+  x = x.replace(/\s+/g, ' ').trim()
+  return x
+}
 
 type EKey = 'FR'|'PS'|'SR'|'GSP'
 
@@ -117,23 +129,29 @@ export async function GET() {
   try {
     const date = yyyymmddInTZ('America/Argentina/Buenos_Aires')
 
-    // TÍTULOS
-    const [fr_t, ps_t, sr_t, gsp_t, titleLiturgic] = await Promise.all([
+    // ===== TÍTULOS: fetch en bruto + sanitización =====
+    const rawTitles = await Promise.all([
       evzFetch(date, 'reading_lt', 'FR').catch(()=>''),
       evzFetch(date, 'reading_lt', 'PS').catch(()=>''),
       evzFetch(date, 'reading_lt', 'SR').catch(()=>''),
       evzFetch(date, 'reading_lt', 'GSP').catch(()=>''),
       evzFetch(date, 'liturgic_t').catch(()=>'')
     ])
+    const [fr_t_raw, ps_t_raw, sr_t_raw, gsp_t_raw, titleLiturgic_raw] = rawTitles
+    const fr_t = cleanTitle(fr_t_raw)
+    const ps_t = cleanTitle(ps_t_raw)
+    const sr_t = cleanTitle(sr_t_raw)
+    const gsp_t = cleanTitle(gsp_t_raw)
+    const titleLiturgic = cleanTitle(titleLiturgic_raw)
 
-    // TEXTOS
-    const [fr_raw, ps_raw, sr_raw, gsp_raw, commentTitle, commentRaw] = await Promise.all([
-      evzFetch(date, 'reading', 'FR').catch(()=>''),
-      evzFetch(date, 'reading', 'PS').catch(()=>''),
-      evzFetch(date, 'reading', 'SR').catch(()=>''),
-      evzFetch(date, 'reading', 'GSP').catch(()=>''),
-      evzFetch(date, 'comment_t').catch(()=>''),
-      evzFetch(date, 'comment').catch(()=>'')
+    // ===== TEXTOS =====
+    const [fr_raw, ps_raw, sr_raw, gsp_raw, commentTitleRaw, commentRaw] = await Promise.all([
+      evzFetch(date, 'reading', 'FR').catch(()=>''),   // Primera lectura
+      evzFetch(date, 'reading', 'PS').catch(()=>''),   // Salmo
+      evzFetch(date, 'reading', 'SR').catch(()=>''),   // Segunda lectura
+      evzFetch(date, 'reading', 'GSP').catch(()=>''),  // Evangelio
+      evzFetch(date, 'comment_t').catch(()=>''),       // Título comentario
+      evzFetch(date, 'comment').catch(()=>''),         // Comentario
     ])
 
     if (!gsp_raw) {
@@ -142,7 +160,7 @@ export async function GET() {
       return NextResponse.json({ ok: true, fallback: fb }, { headers: { 'Cache-Control': 'no-store' } })
     }
 
-    // Sanear
+    // Sanear HTML y crear plain text
     const clean = (x: string) => stripUnwanted(replaceBrWithNewline(x))
     const toPlain = (x: string) => htmlToPlain(x)
 
@@ -150,6 +168,7 @@ export async function GET() {
     const ps = ps_raw ? { key: 'PS', title: ps_t || 'Salmo responsorial', html: clean(ps_raw), textPlain: toPlain(clean(ps_raw)) } : null
     const sr = sr_raw ? { key: 'SR', title: sr_t || 'Segunda lectura', html: clean(sr_raw), textPlain: toPlain(clean(sr_raw)) } : null
     const gsp = gsp_raw ? { key: 'GSP', title: gsp_t || 'Evangelio', html: clean(gsp_raw), textPlain: toPlain(clean(gsp_raw)) } : null
+    const commentTitle = cleanTitle(commentTitleRaw || '')
     const com = commentRaw ? { title: commentTitle || 'Comentario', html: clean(commentRaw), textPlain: toPlain(clean(commentRaw)) } : null
 
     const readings = [fr, ps, sr, gsp].filter(Boolean)
@@ -158,7 +177,7 @@ export async function GET() {
       ok: true,
       source: 'Evangelizo',
       date,
-      titleLiturgic: decodeEntities(titleLiturgic || ''),
+      titleLiturgic,
       readings,
       comment: com
     }, { headers: { 'Cache-Control': 'no-store' } })

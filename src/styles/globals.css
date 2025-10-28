@@ -1,8 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Text:wght@400;700&family=Cormorant+Garamond:wght@400;600;700&family=EB+Garamond:wght@400;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ===== Variables de color existentes + nuevas variables litúrgicas ===== */
 :root{
+  /* Paleta existente */
   --color-primary:#5d87ff;
   --color-primary-text:#0b1020;
   --color-secondary:#e7efff;
@@ -12,29 +16,91 @@
   --color-badge-bg:#fff7e6;
   --color-badge-text:#7a5a1c;
   --color-border:rgba(15,23,42,0.08);
+
+  /* Estilo litúrgico */
+  --font-liturgical: "Crimson Text", "Cormorant Garamond", serif;
+  --font-body: "EB Garamond", serif;
+  --accent-gold: #e8b923;
+  --accent-blue: #1d4ed8;
 }
+
+/* ===== Layout base y fondo ===== */
 html, body { min-height:100%; height:100%; }
 html, body {
+  /* Mantiene tu fondo suave con degradés */
   background:
     radial-gradient(900px 500px at 110% -10%, var(--color-bg2), transparent 60%),
     radial-gradient(800px 450px at -10% 120%, rgba(214,184,119,0.12), transparent 60%),
     linear-gradient(180deg, var(--color-bg1) 0%, #ffffff 100%);
   color:#1f2937;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Helvetica Neue, Arial, "Noto Serif", serif;
+  /* Tipografía por defecto reemplazada por la litúrgica de cuerpo */
+  font-family: var(--font-body), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Helvetica Neue, Arial, "Noto Serif", serif;
 }
+
+/* Capa sutil extra del fondo */
 body::after{
   content:""; position:fixed; inset:0; pointer-events:none;
   background: radial-gradient(1200px 600px at 50% -20%, rgba(93,135,255,0.06), transparent 60%),
              radial-gradient(1200px 600px at 50% 120%, rgba(214,184,119,0.10), transparent 60%);
 }
-.card{ border-radius:16px; border:1px solid var(--color-border); background: rgba(255,255,255,0.85); backdrop-filter: blur(8px); padding:24px; box-shadow: 0 10px 30px rgba(0,0,0,0.06); }
-.btn{ display:inline-flex; align-items:center; justify-content:center; padding:14px 24px; border-radius:14px; font-weight:600; transition: transform .08s ease, box-shadow .2s ease, background .2s ease; }
+
+/* ===== Ajustes litúrgicos de tipografía y color ===== */
+body {
+  /* Fondo base cálido (se mezcla con los degradés de arriba) */
+  background-color: #faf8f3;
+  color: #2d2d2d;
+  line-height: 1.7;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-liturgical);
+  color: var(--accent-blue);
+  text-align: center;
+}
+
+/* ===== Tarjetas (merge de tu estilo + acento dorado lateral) ===== */
+.card{
+  border-radius:16px;
+  border:1px solid var(--color-border);
+  /* Fondo original con glass + tono cálido litúrgico */
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(8px);
+  padding:24px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+
+  /* Acento litúrgico */
+  background-color:#fffdf8; /* leve marfil */
+  border-left: 6px solid var(--accent-gold);
+}
+
+/* ===== Botones y badges (como tenías) ===== */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:14px 24px; border-radius:14px; font-weight:600;
+  transition: transform .08s ease, box-shadow .2s ease, background .2s ease;
+}
 .btn:active{ transform: scale(0.98); }
-.btn-primary{ background: var(--color-primary); color: var(--color-primary-text); box-shadow: 0 6px 18px rgba(93,135,255,0.3); }
+.btn-primary{
+  background: var(--color-primary); color: var(--color-primary-text);
+  box-shadow: 0 6px 18px rgba(93,135,255,0.3);
+}
 .btn-primary:hover{ filter: brightness(1.05); }
-.btn-secondary{ background: var(--color-secondary); color: var(--color-secondary-text); border:1px solid rgba(31,41,55,0.2); }
+.btn-secondary{
+  background: var(--color-secondary); color: var(--color-secondary-text);
+  border:1px solid rgba(31,41,55,0.2);
+}
 .btn-secondary:hover{ filter: brightness(0.98); }
-.badge{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:12px; font-size:12px; background: var(--color-badge-bg); color: var(--color-badge-text); border:1px solid rgba(122,90,28,0.35); }
+
+.badge{
+  display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:12px;
+  font-size:12px; background: var(--color-badge-bg); color: var(--color-badge-text);
+  border:1px solid rgba(122,90,28,0.35);
+}
+
 .muted{ color:#475569; }
-.mystery-thumb{ width:64px; height:64px; border-radius:14px; overflow:hidden; border:1px solid var(--color-border); background:#fff; }
+
+.mystery-thumb{
+  width:64px; height:64px; border-radius:14px; overflow:hidden;
+  border:1px solid var(--color-border); background:#fff;
+}
 .mystery-thumb img{ width:100%; height:100%; object-fit:cover; }

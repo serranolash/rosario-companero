@@ -57,10 +57,12 @@ export default function ReadingsWidget() {
         <p className="text-xs opacity-70">Fuente: Evangelizo</p>
       </div>
 
-      {R.map((r) => (
+      {/* ===== Presentación tipo misal digital ===== */}
+      {R.map((r, idx) => (
         <div key={r.key} className="card">
           <h4 className="text-lg font-semibold mb-2">{r.title}</h4>
-          <div className="text-sm whitespace-pre-wrap leading-relaxed">
+
+          <div className="text-[17px] font-serif whitespace-pre-wrap leading-relaxed tracking-wide">
             {r.textPlain}
           </div>
         </div>
@@ -68,12 +70,19 @@ export default function ReadingsWidget() {
 
       {data.comment && (
         <div className="card">
-          <h4 className="text-lg font-semibold mb-2">{data.comment.title}</h4>
-          <div className="text-sm whitespace-pre-wrap leading-relaxed">
+          <h4 className="text-lg font-semibold text-blue-700 border-b border-yellow-500 pb-1 mb-3">
+            ✠ {data.comment.title}
+          </h4>
+          <div className="text-[17px] font-serif whitespace-pre-wrap leading-relaxed tracking-wide">
             {data.comment.textPlain}
           </div>
         </div>
       )}
+
+      {/* ===== Cierre orante ===== */}
+      <footer className="text-center text-sm italic opacity-70 mt-10">
+        “La Palabra del Señor ilumina nuestros pasos.” ✨
+      </footer>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import '../styles/globals.css'
+import '@/styles/globals.css'
 import type { Metadata, Viewport } from 'next'
 import ThemeProvider from './providers/ThemeProvider'
 
