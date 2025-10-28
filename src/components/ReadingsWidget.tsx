@@ -14,7 +14,7 @@ export default function ReadingsWidget() {
         if (!alive) return
         if (j.ok && j.html) setHtml(j.html)
         else setError('No se pudieron cargar las lecturas.')
-      } catch (e:any) {
+      } catch (e: any) {
         if (!alive) return
         setError(e.message || 'Error de red.')
       }
@@ -28,7 +28,7 @@ export default function ReadingsWidget() {
         <p className="mb-2">No se pudieron cargar las lecturas automáticamente.</p>
         <iframe
           title="Lecturas del día"
-          src="https://universalis.com/mass.htm?lang=es"
+          src="https://universalis.com/es/mass.htm"
           className="w-full h-[70vh] rounded-lg border"
         />
       </div>
