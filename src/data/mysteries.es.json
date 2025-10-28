@@ -2,49 +2,113 @@
   {
     "id": "gozosos",
     "title": "Misterios Gozosos",
+    "description": "Meditamos los momentos de alegría en la Encarnación y vida oculta de Jesús.",
     "days": ["lunes", "sábado"],
     "decades": [
-      { "title": "La Encarnación del Hijo de Dios" },
-      { "title": "La Visitación de Nuestra Señora a santa Isabel" },
-      { "title": "El Nacimiento del Hijo de Dios" },
-      { "title": "La Presentación de Jesús en el templo" },
-      { "title": "El Niño Jesús perdido y hallado en el templo" }
+      {
+        "title": "La Encarnación del Hijo de Dios",
+        "hint": "Contemplamos la humildad de María al aceptar ser la Madre del Salvador. Que aprendamos a decir siempre 'sí' a la voluntad de Dios."
+      },
+      {
+        "title": "La Visitación de María a su prima Santa Isabel",
+        "hint": "María, movida por la caridad, visita a su prima. Que aprendamos a servir con alegría a quienes más lo necesitan."
+      },
+      {
+        "title": "El Nacimiento del Hijo de Dios en Belén",
+        "hint": "Jesús nace pobre y humilde. Que valoremos la sencillez y la pureza del corazón sobre las riquezas del mundo."
+      },
+      {
+        "title": "La Presentación de Jesús en el Templo",
+        "hint": "María y José presentan al Niño a Dios. Que aprendamos a ofrecer nuestra vida con amor al Padre."
+      },
+      {
+        "title": "El Niño Jesús perdido y hallado en el Templo",
+        "hint": "Jesús nos enseña que debemos buscar primero las cosas del Padre. Que nunca nos alejemos de su presencia."
+      }
     ]
   },
   {
     "id": "dolorosos",
     "title": "Misterios Dolorosos",
+    "description": "Meditamos el sufrimiento y la pasión de Nuestro Señor Jesucristo por nuestra redención.",
     "days": ["martes", "viernes"],
     "decades": [
-      { "title": "La Oración de Jesús en el huerto" },
-      { "title": "La Flagelación del Señor" },
-      { "title": "La Coronación de espinas" },
-      { "title": "Jesús con la Cruz a cuestas" },
-      { "title": "La Crucifixión y Muerte de nuestro Señor" }
+      {
+        "title": "La Oración de Jesús en el Huerto",
+        "hint": "Jesús acepta la voluntad del Padre en medio de la angustia. Que aprendamos a confiar aun en el dolor."
+      },
+      {
+        "title": "La Flagelación del Señor",
+        "hint": "Jesús soporta los azotes por nuestros pecados. Que aprendamos a ofrecer nuestros sufrimientos en reparación."
+      },
+      {
+        "title": "La Coronación de espinas",
+        "hint": "Jesús, Rey humillado, acepta las burlas con paciencia. Que cultivemos la humildad ante las pruebas."
+      },
+      {
+        "title": "Jesús con la Cruz a cuestas",
+        "hint": "Jesús carga con amor la Cruz. Que aprendamos a llevar la nuestra con fe y esperanza."
+      },
+      {
+        "title": "La Crucifixión y Muerte de Jesús",
+        "hint": "Jesús entrega su vida por amor. Que sepamos responder a ese amor con conversión y entrega sincera."
+      }
     ]
   },
   {
     "id": "gloriosos",
     "title": "Misterios Gloriosos",
+    "description": "Celebramos la victoria de Cristo sobre la muerte y la glorificación de María.",
     "days": ["miércoles", "domingo"],
     "decades": [
-      { "title": "La Resurrección del Hijo de Dios" },
-      { "title": "La Ascensión del Señor a los Cielos" },
-      { "title": "La Venida del Espíritu Santo" },
-      { "title": "La Asunción de la Virgen María" },
-      { "title": "La Coronación de la Santísima Virgen" }
+      {
+        "title": "La Resurrección del Hijo de Dios",
+        "hint": "Cristo vive y vence la muerte. Que su resurrección renueve nuestra fe y esperanza."
+      },
+      {
+        "title": "La Ascensión del Señor a los Cielos",
+        "hint": "Jesús sube al cielo y nos promete el Espíritu Santo. Que vivamos con los ojos puestos en la eternidad."
+      },
+      {
+        "title": "La Venida del Espíritu Santo",
+        "hint": "El Espíritu Santo llena de fuerza a la Iglesia. Que abramos nuestro corazón a sus dones."
+      },
+      {
+        "title": "La Asunción de la Virgen María",
+        "hint": "María es elevada en cuerpo y alma al cielo. Que aspiremos también a la gloria prometida."
+      },
+      {
+        "title": "La Coronación de la Santísima Virgen",
+        "hint": "María reina junto a su Hijo. Que confiemos siempre en su intercesión maternal."
+      }
     ]
   },
   {
     "id": "luminosos",
     "title": "Misterios Luminosos",
+    "description": "Meditamos los momentos de luz en la vida pública de Jesús.",
     "days": ["jueves"],
     "decades": [
-      { "title": "El Bautismo de Jesús en el Jordán" },
-      { "title": "Las bodas de Caná" },
-      { "title": "El anuncio del Reino de Dios" },
-      { "title": "La Transfiguración del Señor" },
-      { "title": "La Institución de la Eucaristía" }
+      {
+        "title": "El Bautismo de Jesús en el Jordán",
+        "hint": "Jesús se solidariza con nosotros. Que renovemos la gracia de nuestro bautismo."
+      },
+      {
+        "title": "Las Bodas de Caná",
+        "hint": "Jesús convierte el agua en vino. Que aprendamos a confiar en la intercesión de María."
+      },
+      {
+        "title": "El Anuncio del Reino de Dios",
+        "hint": "Jesús proclama el Reino y llama a la conversión. Que vivamos según el Evangelio."
+      },
+      {
+        "title": "La Transfiguración del Señor",
+        "hint": "Jesús revela su gloria divina. Que nuestra fe se fortalezca en la contemplación."
+      },
+      {
+        "title": "La Institución de la Eucaristía",
+        "hint": "Jesús se entrega en el Pan de Vida. Que adoremos su presencia con amor y gratitud."
+      }
     ]
   }
 ]
