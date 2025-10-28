@@ -1,178 +1,76 @@
 // src/lib/audio.ts
-export type VoiceOption = 1 | 2 | 3 | 4 | 5;
-
-export interface AudioPrefs {
-  voice: VoiceOption;
-  delayMs: number;
-  gregorian: boolean;
-}
-
-type Maybe<T> = T | null | undefined;
-
-export class AudioEngine {
-  private ctx?: AudioContext;
-  private usingWebAudio = false;
-  private buffers: Record<string, AudioBuffer | null> = {};
-  private html: Record<string, HTMLAudioElement | null> = {};
-  private bg?: HTMLAudioElement;
-  private synth = (typeof window !== 'undefined' ? window.speechSynthesis : undefined);
-  private selectedVoice: SpeechSynthesisVoice | null = null;
-
-  constructor(private base: string = '/audio') {}
+class AudioSvc {
+  private unlocked = false;
+  private ctx: AudioContext | null = null;
+  private bg: HTMLAudioElement | null = null;
 
   async init() {
-    if (typeof window === 'undefined') return;
-
-    // 🔓 Desbloquear AudioContext para móviles (Android/iOS)
+    // Desbloquear AudioContext en móviles con primer gesto del usuario
     try {
-      const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
-      if (AC) {
-        this.ctx = new AC();
-        this.usingWebAudio = true;
-
-        const unlock = () => {
-          try {
-            if (this.ctx && this.ctx.state === 'suspended') {
-              this.ctx.resume();
-            }
-          } catch {}
-          document.removeEventListener('touchstart', unlock);
-          document.removeEventListener('click', unlock);
-        };
-
-        document.addEventListener('touchstart', unlock, false);
-        document.addEventListener('click', unlock, false);
-      } else {
-        this.usingWebAudio = false;
+      // @ts-ignore
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx && !this.ctx) {
+        this.ctx = new Ctx();
       }
-    } catch {
-      this.usingWebAudio = false;
-    }
-
-    this.pickVoice();
-  }
-
-  private pickVoice() {
-    if (!this.synth) return;
-
-    const pick = () => {
-      const voices: Maybe<SpeechSynthesisVoice[]> = this.synth!.getVoices?.();
-      if (!voices || voices.length === 0) return;
-
-      // Preferí cualquier voz "es-*" si existe; si no, la primera disponible.
-      const esVoices = voices.filter(v => (v.lang || '').toLowerCase().startsWith('es'));
-      this.selectedVoice = (esVoices[0] ?? voices[0]) || null;
-    };
-
-    pick();
-    // No chequeamos contra null; simplemente registramos el callback.
-    // Algunos navegadores solo pueblan las voces luego de este evento.
-    this.synth.onvoiceschanged = pick;
-  }
-
-  private async fetchArrayBuffer(url: string) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('fetch failed');
-    return await res.arrayBuffer();
-  }
-
-  async preload(keys: string[]) {
-    if (this.usingWebAudio && this.ctx) {
-      for (const k of keys) {
-        const url = this.resolve(k);
+      const unlock = () => {
         try {
-          const ab = await this.fetchArrayBuffer(url);
-          const buf = await this.ctx.decodeAudioData(ab.slice(0));
-          this.buffers[k] = buf;
-        } catch {
-          this.buffers[k] = null;
-        }
-      }
-    } else {
-      for (const k of keys) {
-        const url = this.resolve(k);
-        const el = new Audio(url);
-        el.preload = 'auto';
-        el.addEventListener('error', () => { this.html[k] = null; });
-        this.html[k] = el;
-      }
+          if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+        } catch {}
+        document.removeEventListener('touchstart', unlock);
+        document.removeEventListener('click', unlock);
+        this.unlocked = true;
+      };
+      document.addEventListener('touchstart', unlock, { once: true });
+      document.addEventListener('click', unlock, { once: true });
+    } catch (e) {
+      console.warn('No se pudo inicializar/resumir AudioContext:', e);
     }
   }
 
-  async play(key: string, delayMs = 0): Promise<boolean> {
-    // Aseguramos reanudar el contexto si quedó suspendido (típico en móviles)
-    if (this.ctx && this.ctx.state === 'suspended') {
-      try { await this.ctx.resume(); } catch {}
-    }
-
-    if (this.usingWebAudio && this.ctx) {
-      const buf = this.buffers[key];
-      if (!buf) return false;
-      try {
-        const src = this.ctx.createBufferSource();
-        src.buffer = buf;
-        src.connect(this.ctx.destination);
-        src.start(this.ctx.currentTime + (delayMs / 1000));
-        return true;
-      } catch {
-        return false;
-      }
-    }
-
-    const el = this.html[key];
-    if (!el) return false;
-    if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+  /** TTS si está disponible; si no, reproduce el MP3 dado. */
+  sayOrPlay(text: string, mp3Url: string) {
     try {
-      el.currentTime = 0;
-      await el.play();
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  speak(text: string, delayMs = 0) {
-    if (!this.synth) return;
-
-    const doSpeak = () => {
-      const ut = new SpeechSynthesisUtterance(text);
-
-      // 🗣️ Forzamos voz/lenguaje en español si es posible
-      // Si aún no hay voces cargadas, intentamos elegir de nuevo.
-      if (!this.selectedVoice || this.synth!.getVoices().length === 0) {
-        this.pickVoice();
+      if ('speechSynthesis' in window) {
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'es-ES';
+        const voices = speechSynthesis.getVoices();
+        const v = voices.find(v => (v.lang || '').toLowerCase().startsWith('es'));
+        if (v) u.voice = v;
+        // Evita superposición
+        try { speechSynthesis.cancel(); } catch {}
+        speechSynthesis.speak(u);
+        return;
       }
-
-      ut.voice = this.selectedVoice || null;
-      ut.lang  = (this.selectedVoice?.lang ?? 'es-ES');
-      ut.rate  = 1.0;
-      ut.pitch = 1.0;
-
-      this.synth!.speak(ut);
-    };
-
-    if (delayMs > 0) setTimeout(doSpeak, delayMs);
-    else doSpeak();
+    } catch {
+      /* caer a MP3 */
+    }
+    // Fallback MP3
+    const a = new Audio(mp3Url);
+    a.play().catch(() => {/* ignorar */});
   }
 
-  async setGregorian(enabled: boolean) {
-    if (!enabled) {
-      if (this.bg) { this.bg.pause(); this.bg = undefined; }
-      return;
-    }
-
-    const url = this.resolve('gregoriano/loop.mp3');
-    if (!this.bg) {
-      this.bg = new Audio(url);
-      this.bg.loop = true;
-      this.bg.volume = 0.25;
-      this.bg.preload = 'auto';
-    }
-    this.bg.currentTime = 0;
-    this.bg.play().catch(() => { /* ignoramos bloqueo si no hubo gesto */ });
+  /** Reproduce un MP3 directamente (por si querés llamar sin TTS) */
+  play(mp3Url: string) {
+    const a = new Audio(mp3Url);
+    a.play().catch(() => {/* ignorar */});
   }
 
-  private resolve(file: string) {
-    return `${this.base}/${file}`;
+  /** Música gregoriana opcional en loop (ON/OFF) */
+  setGregorian(on: boolean) {
+    const url = '/audio/gregoriano/loop.mp3';
+    if (on) {
+      if (!this.bg) {
+        this.bg = new Audio(url);
+        this.bg.loop = true;
+        this.bg.volume = 0.25;
+      }
+      this.bg.play().catch(() => {/* ignorar */});
+    } else {
+      if (this.bg) {
+        try { this.bg.pause(); this.bg.currentTime = 0; } catch {}
+      }
+    }
   }
 }
+
+export const audio = new AudioSvc();

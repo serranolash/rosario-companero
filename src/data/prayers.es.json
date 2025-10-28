@@ -1,19 +1,22 @@
 {
   "padre_nuestro": {
-    "parte1": "Padre nuestro, que estás en el cielo, santificado sea tu Nombre; venga a nosotros tu reino; hágase tu voluntad, en la tierra como en el cielo.",
-    "parte2": "Danos hoy nuestro pan de cada día; perdona nuestras ofensas, como también nosotros perdonamos a los que nos ofenden; no nos dejes caer en la tentación, y líbranos del mal. Amén."
+    "parte1": "Padre nuestro, que estás en el cielo, santificado sea tu Nombre; venga a nosotros tu reino; hágase tu voluntad en la tierra como en el cielo.",
+    "parte2": "Danos hoy nuestro pan de cada día; perdona nuestras ofensas, como también nosotros perdonamos a los que nos ofenden; no nos dejes caer en la tentación y líbranos del mal. Amén."
   },
   "ave_maria": {
-    "parte1": "Dios te salve, María; llena eres de gracia; el Señor es contigo; bendita tú eres entre todas las mujeres, y bendito es el fruto de tu vientre, Jesús.",
+    "parte1": "Dios te salve, María; llena eres de gracia; el Señor es contigo. Bendita tú eres entre todas las mujeres y bendito es el fruto de tu vientre, Jesús.",
     "parte2": "Santa María, Madre de Dios, ruega por nosotros, pecadores, ahora y en la hora de nuestra muerte. Amén."
   },
   "gloria": {
-    "parte1": "Gloria al Padre, y al Hijo, y al Espíritu Santo,",
-    "parte2": "como era en el principio, ahora y siempre, por los siglos de los siglos. Amén."
+    "parte1": "Gloria al Padre, y al Hijo, y al Espíritu Santo.",
+    "parte2": "Como era en el principio, ahora y siempre, por los siglos de los siglos. Amén."
   },
-  "post_gloria": {
-    "madre_de_gracia": "María es Madre de gracia, Madre de misericordia; en la vida y en la muerte, ampáranos, gran Señora.",
-    "alabanzas": "Alabanzas y gracias sean dadas en todo momento al Santísimo y Divinísimo Sacramento.",
-    "oh_jesus_mio": "Oh Jesús mío, perdona nuestros pecados, líbranos del fuego del infierno, lleva al cielo a todas las almas, especialmente a las más necesitadas de tu misericordia. Amén."
-  }
+  "oh_jesus_mio": "Oh Jesús mío, perdona nuestros pecados, líbranos del fuego del infierno y lleva al cielo a todas las almas, especialmente a las más necesitadas de tu misericordia. Amén.",
+  "bendita_pureza": "Bendita sea tu pureza y eternamente lo sea, pues todo un Dios se recrea en tan graciosa belleza. A ti, celestial Princesa, Virgen Sagrada María, yo te ofrezco en este día alma, vida y corazón. Mírame con compasión. No me dejes, Madre mía. Amén.",
+  "salve": "Dios te salve, Reina y Madre de misericordia, vida, dulzura y esperanza nuestra; Dios te salve. A ti clamamos los desterrados hijos de Eva; a ti suspiramos, gimiendo y llorando en este valle de lágrimas. Ea, pues, Señora, abogada nuestra, vuelve a nosotros esos tus ojos misericordiosos; y después de este destierro, muéstranos a Jesús, fruto bendito de tu vientre. ¡Oh clemente, oh piadosa, oh dulce siempre Virgen María! Ruega por nosotros, santa Madre de Dios, para que seamos dignos de alcanzar las promesas de nuestro Señor Jesucristo. Amén.",
+  "intro_tres_avemarías": [
+    "Por el aumento de la fe: Dios te salve, María...",
+    "Por el aumento de la esperanza: Dios te salve, María...",
+    "Por el aumento de la caridad: Dios te salve, María..."
+  ]
 }

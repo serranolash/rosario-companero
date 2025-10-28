@@ -34,9 +34,13 @@ export default function Page() {
         <div className="card h-20" />
         <div className="card space-y-4">
           <div className="text-lg">Has completado <b>0</b> rosarios.</div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-col sm:flex-row">
             <span className="btn btn-secondary w-full text-center opacity-60">Guía de Misterios</span>
-            <span className="btn btn-primary w-full text-center opacity-60">Rezar ahora</span>
+            <span className="btn btn-secondary w-full text-center opacity-60">Evangelio y lecturas de hoy</span>
+            <div className="flex gap-3 w-full">
+              <span className="btn btn-secondary w-full text-center opacity-60">Rezar una decena</span>
+              <span className="btn btn-primary w-full text-center opacity-60">Rezar el rosario completo</span>
+            </div>
           </div>
         </div>
       </div>
@@ -58,11 +62,25 @@ export default function Page() {
 
       <section className="card space-y-4">
         <div className="text-lg">Has completado <b>{count}</b> rosarios.</div>
+
+        {/* Acciones principales */}
         <div className="flex gap-3 flex-col sm:flex-row">
-          <Link href="/guide" className="btn btn-secondary w-full text-center">Guía de Misterios</Link>
+          <Link href="/guide" className="btn btn-secondary w-full text-center">
+            Guía de Misterios
+          </Link>
+
+          {/* Nuevo botón a /lecturas */}
+          <Link href="/lecturas" className="btn btn-secondary w-full text-center">
+            Evangelio y lecturas de hoy
+          </Link>
+
           <div className="flex gap-3 w-full">
-            <Link href="/pray/decena" className="btn btn-secondary w-full text-center">Rezar una decena</Link>
-            <Link href="/pray/rosario" className="btn btn-primary w-full text-center">Rezar el rosario completo</Link>
+            <Link href="/pray/decena" className="btn btn-secondary w-full text-center">
+              Rezar una decena
+            </Link>
+            <Link href="/pray/rosario" className="btn btn-primary w-full text-center">
+              Rezar el rosario completo
+            </Link>
           </div>
         </div>
       </section>
