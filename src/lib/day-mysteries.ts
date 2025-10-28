@@ -1,4 +1,3 @@
-// src/lib/day-mysteries.ts
 export type MysteryId = 'gozosos' | 'dolorosos' | 'gloriosos' | 'luminosos';
 
 const titleById: Record<MysteryId, string> = {
@@ -25,15 +24,17 @@ const byWeekdayIndex: Record<number, MysteryId> = {
   6: 'gozosos',    // sábado
 };
 
-export function getTodayMystery(date = new Date(), tz = 'America/Argentina/Buenos_Aires') {
-  // Si querés precisión por TZ, podés ajustar con Intl, pero para MVP vale getDay()
-  const dayIdx = date.getDay();
-  const id = byWeekdayIndex[dayIdx];
-  const title = titleById[id];
-  return { id, title } as { id: MysteryId; title: string };
+export function getTodayMystery(date = new Date()) {
+  const id = byWeekdayIndex[date.getDay()];
+  return { id, title: titleById[id] };
 }
 
 export function dayLabelForToday(date = new Date()) {
   const { id } = getTodayMystery(date);
-  return daysLabelById[id]; // ej: "martes / viernes"
+  return daysLabelById[id];
+}
+
+// ✅ Export que faltaba (si lo estás usando)
+export function guessMysteryIdByLocalDate(date = new Date()) {
+  return getTodayMystery(date).id;
 }
