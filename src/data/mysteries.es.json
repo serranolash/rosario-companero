@@ -2,120 +2,49 @@
   {
     "id": "gozosos",
     "title": "Misterios Gozosos",
-    "days": [
-      "lunes",
-      "sábado"
-    ],
+    "days": ["lunes", "sábado"],
     "decades": [
-      {
-        "title": "La Anunciación",
-        "hint": "Contemplemos la humildad de María"
-      },
-      {
-        "title": "La Visitación",
-        "hint": "La caridad fraterna"
-      },
-      {
-        "title": "El Nacimiento de Jesús",
-        "hint": "La alegría del Salvador"
-      },
-      {
-        "title": "La Presentación en el Templo",
-        "hint": "La obediencia de la Sagrada Familia"
-      },
-      {
-        "title": "El Niño Jesús hallado en el Templo",
-        "hint": "La sabiduría de Cristo"
-      }
+      { "title": "La Encarnación del Hijo de Dios" },
+      { "title": "La Visitación de Nuestra Señora a santa Isabel" },
+      { "title": "El Nacimiento del Hijo de Dios" },
+      { "title": "La Presentación de Jesús en el templo" },
+      { "title": "El Niño Jesús perdido y hallado en el templo" }
     ]
   },
   {
     "id": "dolorosos",
     "title": "Misterios Dolorosos",
-    "days": [
-      "martes",
-      "viernes"
-    ],
+    "days": ["martes", "viernes"],
     "decades": [
-      {
-        "title": "La Oración en el Huerto",
-        "hint": "La obediencia al Padre"
-      },
-      {
-        "title": "La Flagelación del Señor",
-        "hint": "La reparación"
-      },
-      {
-        "title": "La Coronación de Espinas",
-        "hint": "La paciencia en las pruebas"
-      },
-      {
-        "title": "Jesús con la Cruz a cuestas",
-        "hint": "El seguimiento de Cristo"
-      },
-      {
-        "title": "La Crucifixión y Muerte del Señor",
-        "hint": "El amor redentor"
-      }
+      { "title": "La Oración de Jesús en el huerto" },
+      { "title": "La Flagelación del Señor" },
+      { "title": "La Coronación de espinas" },
+      { "title": "Jesús con la Cruz a cuestas" },
+      { "title": "La Crucifixión y Muerte de nuestro Señor" }
     ]
   },
   {
     "id": "gloriosos",
     "title": "Misterios Gloriosos",
-    "days": [
-      "domingo",
-      "miércoles"
-    ],
+    "days": ["miércoles", "domingo"],
     "decades": [
-      {
-        "title": "La Resurrección",
-        "hint": "La victoria sobre la muerte"
-      },
-      {
-        "title": "La Ascensión del Señor",
-        "hint": "La esperanza del cielo"
-      },
-      {
-        "title": "La Venida del Espíritu Santo",
-        "hint": "Los dones del Espíritu"
-      },
-      {
-        "title": "La Asunción de la Virgen",
-        "hint": "La gloria de María"
-      },
-      {
-        "title": "La Coronación de María",
-        "hint": "Reina y Señora"
-      }
+      { "title": "La Resurrección del Hijo de Dios" },
+      { "title": "La Ascensión del Señor a los Cielos" },
+      { "title": "La Venida del Espíritu Santo" },
+      { "title": "La Asunción de la Virgen María" },
+      { "title": "La Coronación de la Santísima Virgen" }
     ]
   },
   {
     "id": "luminosos",
     "title": "Misterios Luminosos",
-    "days": [
-      "jueves"
-    ],
+    "days": ["jueves"],
     "decades": [
-      {
-        "title": "El Bautismo del Señor",
-        "hint": "Ser hijos en el Hijo"
-      },
-      {
-        "title": "Las Bodas de Caná",
-        "hint": "María nos lleva a Jesús"
-      },
-      {
-        "title": "El Anuncio del Reino",
-        "hint": "Conversión y fe"
-      },
-      {
-        "title": "La Transfiguración",
-        "hint": "Escuchar al Hijo amado"
-      },
-      {
-        "title": "La Institución de la Eucaristía",
-        "hint": "Amor hasta el extremo"
-      }
+      { "title": "El Bautismo de Jesús en el Jordán" },
+      { "title": "Las bodas de Caná" },
+      { "title": "El anuncio del Reino de Dios" },
+      { "title": "La Transfiguración del Señor" },
+      { "title": "La Institución de la Eucaristía" }
     ]
   }
 ]
