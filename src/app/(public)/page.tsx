@@ -1,95 +1,54 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
-import MysteryCard from '@/components/MysteryCard'
-import { getTodayMystery, dayLabelForToday } from '@/lib/day-mysteries'
-import { load } from '@/lib/storage'
-import { registerSW } from '@/lib/pwa'
 
-export default function Page() {
-  const [mounted, setMounted] = useState(false)
-  const [count, setCount] = useState<number>(0)
+export default function HomePage(){
+  return (
+    <main className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl md:text-4xl font-extrabold text-center mb-2">Rosario Compañero</h1>
+      <p className="text-center muted mb-6">Aplicación para rezar el Santo Rosario</p>
 
-  // Datos del misterio del día (sincrónicos)
-  const mystery = getTodayMystery() // { id, title }
-  const labelDelDia = dayLabelForToday() // ej: "martes / viernes"
+      {/* Bloque de acciones: grilla responsiva con botones de igual tamaño */}
+      <div className="card mb-6">
+        <p className="mb-4">Has completado <b>3</b> rosarios.</p>
 
-  useEffect(() => {
-    // PWA
-    registerSW?.()
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <Link href="/guide" className="btn btn-secondary w-full h-24 flex items-center justify-center text-center">
+            <span>Guía de<br/>Misterios</span>
+          </Link>
 
-    const c = Number(load('rosary:count', 0)) || 0
-    setCount(c)
-    setMounted(true)
-  }, [])
+          <Link href="/lecturas" className="btn btn-secondary w-full h-24 flex items-center justify-center text-center">
+            <span>Evangelio y lecturas<br/>de hoy</span>
+          </Link>
 
-  if (!mounted) {
-    return (
-      <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
-        <div className="card h-20" />
-        <div className="card space-y-4">
-          <div className="text-lg">Has completado <b>0</b> rosarios.</div>
-          <div className="flex gap-3 flex-col sm:flex-row">
-            <span className="btn btn-secondary w-full text-center opacity-60">Guía de Misterios</span>
-            <span className="btn btn-secondary w-full text-center opacity-60">Evangelio y lecturas de hoy</span>
-            <div className="flex gap-3 w-full">
-              <span className="btn btn-secondary w-full text-center opacity-60">Rezar una decena</span>
-              <span className="btn btn-primary w-full text-center opacity-60">Rezar el rosario completo</span>
-            </div>
-          </div>
+          <Link href="/noticias" className="btn btn-secondary w-full h-24 flex items-center justify-center text-center">
+            <span>Noticias</span>
+          </Link>
+
+          <a
+            className="btn btn-primary w-full h-24 flex items-center justify-center text-center"
+            href="https://youtube.com/channel/UCCB6TeHkWMk9pNTvAvMGZpw"
+            target="_blank" rel="noreferrer"
+          >
+            <span>Canal de<br/>YouTube</span>
+          </a>
+
+          <Link href="/pray/decena" className="btn btn-secondary w-full h-24 flex items-center justify-center text-center">
+            <span>Rezar una<br/>decena</span>
+          </Link>
+        </div>
+
+        {/* Acciones principales debajo (dos columnas en desktop) */}
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Link href="/pray/rosario" className="btn btn-primary w-full h-12 flex items-center justify-center">
+            Rezar el rosario completo
+          </Link>          
         </div>
       </div>
-    )
-  }
 
-  return (
-    <main className="mx-auto max-w-2xl px-4 py-8 space-y-6">
-      <section className="space-y-2">
-        <span className="badge">Misterio del día</span>
-
-        {/* ✅ Uso del componente y helpers correctos */}
-        <MysteryCard
-          id={mystery.id}                               // 'dolorosos' | 'gozosos' | 'gloriosos' | 'luminosos'
-          title={`Misterios ${mystery.title}`}          // ej: "Misterios Dolorosos"
-          todayLabel={`Hoy: ${labelDelDia}`}            // ej: "Hoy: martes / viernes"
-        />
-      </section>
-
-      <section className="card space-y-4">
-        <div className="text-lg">Has completado <b>{count}</b> rosarios.</div>
-
-        {/* Acciones principales */}
-        <div className="flex gap-3 flex-col sm:flex-row">
-          <Link href="/guide" className="btn btn-secondary w-full text-center">
-            Guía de Misterios
-          </Link>
-
-          {/* Botón a /lecturas */}
-          <Link href="/lecturas" className="btn btn-secondary w-full text-center">
-            Evangelio y lecturas de hoy
-          </Link>
-
-          <div className="flex gap-3 w-full">
-            <Link href="/pray/decena" className="btn btn-secondary w-full text-center">
-              Rezar una decena
-            </Link>
-            <Link href="/pray/rosario" className="btn btn-primary w-full text-center">
-              Rezar el rosario completo
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      <p className="muted text-sm">
+      <p className="text-center text-sm text-gray-500">
         Tip: podés instalar esta app desde el menú del navegador para usarla offline.
       </p>
-
-      <footer className="mt-10 text-center text-xs text-gray-500">
-        <span className="uppercase tracking-wide">
-          Desarrollado por <strong>Ing. Alex Serrano</strong>
-        </span>
-      </footer>
     </main>
   )
 }

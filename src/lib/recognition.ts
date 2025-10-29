@@ -1,6 +1,5 @@
 // src/lib/recognition.ts
 
-// Declaraciones mínimas para TS (SpeechRecognition / webkitSpeechRecognition)
 declare global {
   interface Window {
     webkitSpeechRecognition?: any;
@@ -8,22 +7,22 @@ declare global {
   }
 }
 
-/** Callbacks para UI */
 type PartialCb = (text: string) => void;
 type FinalCb = (text: string) => void;
 
 export type ListenOptions = {
-  lang?: string;            // ej: 'es-AR' | 'es-ES'
-  minDurationMs?: number;   // mínimo tiempo escuchando antes de aceptar final
-  endSilenceMs?: number;    // silencio requerido para dar por finalizado
-  minChars?: number;        // evita disparos con frases muy cortas
-  maxTotalMs?: number;      // tope de sesión por seguridad
-  silenceChecks?: number;   // cantidad de chequeos de silencio consecutivos
+  lang?: string;
+  minDurationMs?: number;
+  endSilenceMs?: number;
+  minChars?: number;
+  maxTotalMs?: number;
+  silenceChecks?: number;
 };
 
 class RecognitionSvc {
   private rec: any | null = null;
   private listening = false;
+  private finished = false;
 
   private partialCb: PartialCb | null = null;
   private finalCb: FinalCb | null = null;
@@ -31,54 +30,55 @@ class RecognitionSvc {
   onPartial(cb: PartialCb | null) { this.partialCb = cb; }
   onFinal(cb: FinalCb | null) { this.finalCb = cb; }
 
-  /** Prepara y testea soporte. No lanza si no hay SR: simplemente no-op. */
-  async prepare() {
-    // nada que hacer aquí; se crea para cada listen()
-    return;
-  }
+  async prepare() { /* no-op */ }
 
-  /** Corta escucha sin romper la app. */
   stop() {
     try { this.rec && this.rec.stop && this.rec.stop(); } catch {}
     this.listening = false;
+    this.finished = true;
   }
 
-  /** Escucha hasta que detecta final por silencio + duración + minChars. */
   listen(opts: ListenOptions = {}): Promise<void> {
     const {
       lang = 'es-AR',
-      minDurationMs = 2500,
-      endSilenceMs = 1500,
+      minDurationMs = 3600,
+      endSilenceMs = 1800,
       minChars = 18,
-      maxTotalMs = 25000,
+      maxTotalMs = 20000,
       silenceChecks = 2,
     } = opts;
 
     return new Promise<void>((resolve) => {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) {
-        // Sin soporte: esperamos un tiempo y resolvemos
-        setTimeout(() => resolve(), Math.max(minDurationMs, 1200));
+        setTimeout(() => resolve(), Math.max(minDurationMs, 1000));
         return;
       }
+
+      // si había uno previo, detenerlo
+      try { this.rec && this.rec.stop && this.rec.stop(); } catch {}
 
       const rec = new SR();
       this.rec = rec;
       this.listening = true;
+      this.finished = false;
 
       rec.lang = lang;
       rec.continuous = true;
       rec.interimResults = true;
 
-      let startedAt = Date.now();
+      const startedAt = Date.now();
       let lastVoiceAt = Date.now();
       let finals = '';
       let interim = '';
       let okSilenceCount = 0;
+      let resolved = false;
 
-      const finish = () => {
-        if (!this.listening) return;
+      const finishOnce = () => {
+        if (resolved) return;
+        resolved = true;
         this.listening = false;
+        this.finished = true;
         try { rec.stop(); } catch {}
         this.partialCb?.('');
         this.finalCb?.(finals.trim());
@@ -105,24 +105,21 @@ class RecognitionSvc {
           }
         }
 
-        // si hay silencio y ya cumplimos mínimos, cerramos
         if (!tooShort() && enoughChars() && longSilence()) {
           okSilenceCount++;
-          if (okSilenceCount >= silenceChecks) {
-            finish();
-          }
+          if (okSilenceCount >= silenceChecks) finishOnce();
         } else if (!longSilence()) {
           okSilenceCount = 0;
         }
       };
 
-      rec.onerror = () => finish();
-      rec.onend = () => finish();
+      rec.onerror = () => finishOnce();
+      rec.onend = () => finishOnce();
 
-      // Cortes de seguridad
-      setTimeout(() => finish(), maxTotalMs);
+      // corte duro por seguridad
+      setTimeout(() => finishOnce(), maxTotalMs);
 
-      try { rec.start(); } catch { finish(); }
+      try { rec.start(); } catch { finishOnce(); }
     });
   }
 }

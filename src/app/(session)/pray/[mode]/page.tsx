@@ -64,17 +64,23 @@ function ordinal(n: number) {
   return ['Primer','Segundo','Tercer','Cuarto','Quinto'][n-1] || `${n}º`
 }
 
-async function waitUser(kind: 'pn'|'ave'|'gloria') {
+// Espera la parte del feligrés, con fallback para que NUNCA se trabe
+async function waitUserOrTimeout(kind: 'pn'|'ave'|'gloria', timeoutMs = 17000) {
   if (!autoHandsFree) return
-  await new Promise(r => setTimeout(r, 300))
-  await recognition.listen({
-    lang: 'es-AR',
-    minDurationMs: 3000,
-    endSilenceMs: 1600,
-    minChars: 24,
-    maxTotalMs: 28000,
-    silenceChecks: 2,
-  })
+  try { recognition.stop() } catch {}
+  await new Promise(r => setTimeout(r, 250)) // pequeña pausa natural
+
+  await Promise.race([
+    recognition.listen({
+      lang: 'es-AR',
+      minDurationMs: 2800,
+      endSilenceMs: 1500,
+      minChars: kind === 'ave' ? 18 : 22,
+      maxTotalMs: timeoutMs,
+      silenceChecks: 2,
+    }),
+    new Promise<void>(res => setTimeout(res, timeoutMs + 500)), // fallback duro
+  ])
 }
 
 export default function PrayPage() {
@@ -98,8 +104,6 @@ export default function PrayPage() {
     audio.setOnLine((l) => setShowLine(l))
     return () => { try { recognition.stop() } catch {} }
   }, [])
-
-  // ----------- bloques lógicos -----------
 
   async function runIntroBlock() {
     setUiCue({ title: 'Inicio', subtitle: 'Recemos juntos' })
@@ -126,22 +130,29 @@ export default function PrayPage() {
     setPhase('ANNOUNCE')
     try { await audio.sayChunks(`${ordinal(decadeIdx + 1)} misterio ${title}: ${dTitle}.`) } catch {}
 
+    // A partir de acá, ya ejecutando pasos del misterio
+    setPhase('RUNNING')
+
+    // Padre Nuestro
     setUiCue({ title: 'Padre Nuestro', subtitle: 'Tu parte primero…' })
-    await waitUser('pn')
+    await waitUserOrTimeout('pn')
     await audio.sayChunks((prayers as any).padre_nuestro?.parte2 ?? 'Amén.')
 
+    // 10 Ave Marías
     for (let i = 0; i < 10; i++) {
       setAveCount(i)
       setUiCue({ title: `Ave María (${i+1}/10)`, subtitle: 'Tu parte primero…' })
-      await waitUser('ave')
+      await waitUserOrTimeout('ave')
       await audio.sayChunks((prayers as any).ave_maria?.parte2 ?? 'Santa María, Madre de Dios…')
       setAveCount(i + 1)
     }
 
+    // Gloria
     setUiCue({ title: 'Gloria', subtitle: 'Tu parte…' })
-    await waitUser('gloria')
+    await waitUserOrTimeout('gloria')
     await audio.sayChunks((prayers as any).gloria?.parte2 ?? 'Como era en el principio…')
 
+    // Opcionales
     const madre = (prayers as any)['maria_madre_de_gracia']
     const oh = (prayers as any)['oh_jesus_mio']
     if (madre) await audio.sayChunks(madre)
@@ -150,10 +161,14 @@ export default function PrayPage() {
     setUiCue(null)
 
     const next = decadeIdx + 1
-    if (next < MAX_DECADES) { setDecadeIdx(next); setAveCount(0) }
+    if (next < MAX_DECADES) {
+      setDecadeIdx(next)
+      setAveCount(0)
+    }
   }
 
   async function runAllDecades() {
+    // Por claridad, aseguramos fase:
     setPhase('RUNNING')
     for (let d = decadeIdx; d < MAX_DECADES; d++) {
       await runOneDecade()
@@ -162,12 +177,12 @@ export default function PrayPage() {
 
   async function startSessionFull() {
     if (started) return
-    setStarted(true); setPhase('INTRO')
+    setStarted(true)
+    setPhase('INTRO')
     try {
       await audio.init()
       await recognition.prepare()
       await runIntroBlock()
-      setPhase('RUNNING')
       await runAllDecades()
       setPhase('DONE')
     } catch { setPhase('DONE') }
@@ -175,23 +190,31 @@ export default function PrayPage() {
 
   async function startSessionSingle() {
     if (started) return
-    setStarted(true); setPhase('INTRO')
+    setStarted(true)
+    setPhase('INTRO')
     try {
       await audio.init()
       await recognition.prepare()
       await runIntroBlock()
-      setPhase('RUNNING')
       await runOneDecade()
       setPhase('DONE')
     } catch { setPhase('DONE') }
   }
 
-  // ----------------- UI -----------------
   return (
     <main className="container mx-auto px-4 py-6">
-      <div className="flex items-center gap-3 mb-4">
-        <Link href="/" className="text-sm underline">← Volver</Link>
-        <h1 className="text-2xl md:text-3xl font-extrabold">Rezo del Rosario</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3">
+          <Link href="/" className="text-sm underline">← Volver</Link>
+          <h1 className="text-2xl md:text-3xl font-extrabold">Rezo del Rosario</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href="/lecturas" className="btn btn-secondary">Lecturas del día</Link>
+          <Link href="/noticias" className="btn btn-secondary">Noticias</Link>
+          <a className="btn btn-primary" href="https://youtube.com/channel/UCCB6TeHkWMk9pNTvAvMGZpw" target="_blank" rel="noreferrer">
+            Canal de YouTube
+          </a>
+        </div>
       </div>
 
       {showLine && (
