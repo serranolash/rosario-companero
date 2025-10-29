@@ -1,20 +1,52 @@
 // src/lib/audio.ts
-export type OnLineFn = (line: string | null) => void;
+// TTS/Audio robusto con init(), setOnLine(), sayOrPlay(), sayChunks(), stop().
+
+type OnLine = ((line: string | null) => void) | null;
+
+function splitIntoChunks(text: string, max = 180): string[] {
+  // Divide por puntuación; si un bloque supera max, lo trocea por espacios.
+  const parts = text
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(/([.!?;:])\s+/)
+    .reduce<string[]>((acc, cur, i, arr) => {
+      if (i % 2 === 0) {
+        const end = arr[i + 1] || '';
+        acc.push((cur + (end ? end + ' ' : '')).trim());
+      }
+      return acc;
+    }, [])
+    .filter(Boolean);
+
+  const out: string[] = [];
+  for (const p of parts) {
+    if (p.length <= max) { out.push(p); continue; }
+    let tmp = p;
+    while (tmp.length > max) {
+      const cut = tmp.lastIndexOf(' ', max);
+      if (cut <= 0) break;
+      out.push(tmp.slice(0, cut));
+      tmp = tmp.slice(cut + 1);
+    }
+    if (tmp) out.push(tmp);
+  }
+  return out;
+}
 
 class AudioSvc {
   private ctx: AudioContext | null = null;
   private bg: HTMLAudioElement | null = null;
+  private onLine: OnLine = null;
 
-  private onLineCb: OnLineFn | null = null;
-  private speaking = false;
+  setOnLine(cb: OnLine) { this.onLine = cb; }
 
   async init() {
     try {
       // @ts-ignore
-      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (Ctx && !this.ctx) this.ctx = new Ctx();
 
-      // Desbloqueo en móviles
+      // Desbloqueo móvil
       const unlock = () => {
         try { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); } catch {}
         document.removeEventListener('touchstart', unlock);
@@ -22,133 +54,68 @@ class AudioSvc {
       };
       document.addEventListener('touchstart', unlock, { once: true });
       document.addEventListener('click', unlock, { once: true });
+
+      // Warm-up TTS (cargar voces)
+      try { window.speechSynthesis?.getVoices?.(); } catch {}
     } catch {}
   }
 
-  setOnLine(cb: OnLineFn | null) {
-    this.onLineCb = cb;
+  sayOrPlay(text: string, mp3Url?: string): Promise<void> {
+    // Notifica a la UI lo que “dice” la app
+    try { this.onLine?.(text); } catch {}
+
+    return new Promise<void>((resolve) => {
+      // 1) TTS preferente
+      try {
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          const u = new SpeechSynthesisUtterance(text);
+          u.lang = 'es-ES';
+          const voices = (window.speechSynthesis.getVoices?.() || []) as SpeechSynthesisVoice[];
+          const v = voices.find(v => (v.lang || '').toLowerCase().startsWith('es'));
+          if (v) u.voice = v;
+          try { window.speechSynthesis.cancel(); } catch {}
+          u.onend = () => { try { this.onLine?.(null); } catch {} ; resolve(); };
+          u.onerror = () => { try { this.onLine?.(null); } catch {} ; resolve(); };
+          window.speechSynthesis.speak(u);
+          return;
+        }
+      } catch { /* fall through */ }
+
+      // 2) Fallback MP3 (si se pasó URL)
+      if (mp3Url) {
+        const a = new Audio(mp3Url);
+        const done = () => { try { this.onLine?.(null); } catch {} ; resolve(); };
+        a.addEventListener('ended', done, { once: true });
+        a.addEventListener('error', done, { once: true });
+        setTimeout(done, 12000);
+        a.play().catch(done);
+        return;
+      }
+
+      // 3) Sin TTS ni MP3 → resolver igual
+      try { this.onLine?.(null); } catch {}
+      resolve();
+    });
+  }
+
+  /** Dice un texto largo en trozos, evitando cortes del TTS. */
+  async sayChunks(text: string, mp3Base?: string) {
+    const chunks = splitIntoChunks(text);
+    for (let i = 0; i < chunks.length; i++) {
+      const mp3 = mp3Base ? `${mp3Base}.${i + 1}.mp3` : undefined;
+      await this.sayOrPlay(chunks[i], mp3);
+      // micro pausa natural
+      await new Promise((r) => setTimeout(r, 120));
+    }
   }
 
   stop() {
-    try { window.speechSynthesis?.cancel(); } catch {}
-    this.speaking = false;
-    this.onLineCb?.(null);
-  }
-
-  /** TTS preferente con fallback a audio MP3 (si se provee) */
-  sayOrPlay(text: string, mp3Url?: string): Promise<void> {
-    return new Promise<void>((resolve) => {
-      // Preferir TTS
-      try {
-        if ('speechSynthesis' in window) {
-          const u = new SpeechSynthesisUtterance(text);
-          u.lang = 'es-ES';
-
-          const pickVoice = () => {
-            const voices = speechSynthesis.getVoices();
-            const v = voices.find(v => (v.lang || '').toLowerCase().startsWith('es'));
-            if (v) u.voice = v;
-          };
-          pickVoice();
-          window.speechSynthesis.onvoiceschanged = pickVoice;
-
-          try { speechSynthesis.cancel(); } catch {}
-          this.speaking = true;
-          this.onLineCb?.(text);
-
-          u.onend = () => { this.speaking = false; this.onLineCb?.(null); resolve(); };
-          u.onerror = () => { this.speaking = false; this.onLineCb?.(null); resolve(); };
-          speechSynthesis.speak(u);
-          return;
-        }
-      } catch {
-        /* caer a MP3 */
-      }
-
-      // Fallback MP3 si se pasó URL
-      if (mp3Url) {
-        const a = new Audio(mp3Url);
-        const done = () => { this.onLineCb?.(null); resolve(); };
-        this.onLineCb?.(text);
-        a.addEventListener('ended', done, { once: true });
-        a.addEventListener('error', done, { once: true });
-        setTimeout(done, 15000);
-        a.play().catch(done);
-      } else {
-        // Si no hay TTS ni MP3, resolvemos igual para no colgar flujo
-        resolve();
-      }
-    });
-  }
-
-  play(mp3Url: string): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const a = new Audio(mp3Url);
-      const done = () => resolve();
-      a.addEventListener('ended', done, { once: true });
-      a.addEventListener('error', done, { once: true });
-      setTimeout(done, 15000);
-      a.play().catch(done);
-    });
-  }
-
-  setGregorian(on: boolean) {
-    const url = '/audio/gregoriano/loop.mp3';
-    if (on) {
-      if (!this.bg) {
-        this.bg = new Audio(url);
-        this.bg.loop = true;
-        this.bg.volume = 0.25;
-      }
-      this.bg.play().catch(() => {});
-    } else {
-      if (this.bg) { try { this.bg.pause(); this.bg.currentTime = 0; } catch {} }
+    try { window.speechSynthesis?.cancel?.(); } catch {}
+    try { this.onLine?.(null); } catch {}
+    if (this.bg) {
+      try { this.bg.pause(); this.bg.currentTime = 0; } catch {}
     }
   }
-
-  /** Nuevo: habla en "chunks" para textos largos y evitar cortes */
-  async sayChunks(textOrLines: string | string[]): Promise<void> {
-    const lines: string[] = Array.isArray(textOrLines)
-      ? textOrLines
-      : splitInChunks(textOrLines, 160);
-
-    for (const line of lines) {
-      const clean = line.trim();
-      if (!clean) continue;
-      await this.sayOrPlay(clean);
-      // pequeña pausa natural entre frases
-      await pause(250);
-    }
-  }
-}
-
-function pause(ms: number) {
-  return new Promise(res => setTimeout(res, ms));
-}
-
-/** Divide por puntuación y asegura longitud máxima aproximada */
-function splitInChunks(text: string, maxLen = 160): string[] {
-  const raw = text
-    .replace(/\s+/g, ' ')
-    .split(/(?<=[\.\!\?\:;])\s+/g);
-
-  const chunks: string[] = [];
-  for (const seg of raw) {
-    if (seg.length <= maxLen) { chunks.push(seg); continue; }
-    // Si una frase supera el máximo, la troceamos duramente por palabras
-    let cur = '';
-    for (const w of seg.split(' ')) {
-      if ((cur + ' ' + w).trim().length > maxLen) {
-        if (cur.trim()) chunks.push(cur.trim());
-        cur = w;
-      } else {
-        cur = (cur ? cur + ' ' : '') + w;
-      }
-    }
-    if (cur.trim()) chunks.push(cur.trim());
-  }
-  return chunks;
 }
 
 export const audio = new AudioSvc();
-export type AudioSvcT = AudioSvc;
