@@ -1,0 +1,23 @@
+[
+  {
+    "id": "2025-10-29-1",
+    "title": "Colecta de Alimentos",
+    "date": "29/10/2025",
+    "body": "Este domingo, al finalizar la misa de las 19:00, estaremos recibiendo alimentos no perecederos.",
+    "image": "/images/noticias/colecta.jpg"
+  },
+  {
+    "id": "2025-10-29-2",
+    "title": "Catequesis de Confirmación",
+    "date": "29/10/2025",
+    "body": "Inscripciones abiertas en secretaría parroquial.\nHorarios: Martes y Jueves 18:30.",
+    "image": "/images/noticias/catequesis.jpg"
+  },
+  {
+    "id": "2025-10-29-3",
+    "title": "Adoración Eucarística",
+    "date": "29/10/2025",
+    "body": "Los viernes a las 18:00 hs, en el templo. Un momento de oración y silencio ante el Santísimo.",
+    "image": "/images/noticias/adoracion.jpg"
+  }
+]

@@ -1,17 +1,14 @@
 // src/lib/audio.ts
+export type OnLineFn = (line: string | null) => void;
+
 class AudioSvc {
   private ctx: AudioContext | null = null;
   private bg: HTMLAudioElement | null = null;
 
-  private pauseRec?: () => Promise<void> | void;
-  private resumeRec?: () => Promise<void> | void;
-  private onLine?: (line: string | null) => void;
-
-  initOnce = false;
+  private onLineCb: OnLineFn | null = null;
+  private speaking = false;
 
   async init() {
-    if (this.initOnce) return;
-    this.initOnce = true;
     try {
       // @ts-ignore
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -27,85 +24,71 @@ class AudioSvc {
     } catch {}
   }
 
-  setRecognitionHooks(hooks: { pause?: () => Promise<void> | void; resume?: () => Promise<void> | void }) {
-    this.pauseRec = hooks.pause;
-    this.resumeRec = hooks.resume;
-  }
-  setOnLine(fn: (line: string | null) => void) {
-    this.onLine = fn;
+  /** Permite que la UI muestre/limpie la línea que se esté “diciendo”. */
+  setOnLine(cb: OnLineFn | null) {
+    this.onLineCb = cb;
   }
 
-  private async speak(text: string): Promise<void> {
-    // TTS robusto con timeout + voiceschanged
-    if (!('speechSynthesis' in window)) throw new Error('no-tts');
+  /** Cancela cualquier TTS en curso. */
+  stop() {
+    try { window.speechSynthesis?.cancel(); } catch {}
+    this.speaking = false;
+    this.onLineCb?.(null);
+  }
 
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'es-ES';
-
-    const pick = () => {
-      const vs = speechSynthesis.getVoices();
-      const v = vs.find(v => (v.lang || '').toLowerCase().startsWith('es')) || vs[0];
-      if (v) u.voice = v;
-    };
-    pick();
-    if (!u.voice) {
-      await new Promise<void>((res) => {
-        const once = () => { pick(); speechSynthesis.removeEventListener('voiceschanged', once); res(); };
-        speechSynthesis.addEventListener('voiceschanged', once, { once: true });
-        // fallback por si nunca llega
-        setTimeout(() => { try { speechSynthesis.removeEventListener('voiceschanged', once); } catch{}; res(); }, 1200);
-      });
-      pick();
-    }
-
-    try { speechSynthesis.cancel(); } catch {}
+  /** Habla con TTS y, si no está disponible, reproduce MP3. */
+  sayOrPlay(text: string, mp3Url: string): Promise<void> {
     return new Promise<void>((resolve) => {
-      let done = false;
-      const finish = () => { if (done) return; done = true; resolve(); };
-      u.onend = finish;
-      u.onerror = finish;
-      speechSynthesis.speak(u);
-      // salvavidas
-      setTimeout(finish, Math.max(2000, Math.min(20000, 250 * (text?.length || 0))));
-    });
-  }
-
-  private async playMp3(url: string): Promise<void> {
-    if (!url) throw new Error('empty-mp3');
-    return new Promise<void>((resolve) => {
-      const a = new Audio(url);
-      let done = false;
-      const finish = () => { if (done) return; done = true; resolve(); };
-      a.addEventListener('ended', finish, { once: true });
-      a.addEventListener('error', finish, { once: true });
-      setTimeout(finish, 15000);
-      a.play().catch(finish);
-    });
-  }
-
-  /** Muestra línea en UI + pausa STT + TTS o MP3 + reanuda STT. SIEMPRE RESUELVE. */
-  async sayOrPlay(text: string, mp3Url?: string): Promise<void> {
-    try { await this.pauseRec?.(); } catch {}
-    if (this.onLine && text) this.onLine(text);
-
-    try {
+      // Preferir TTS
       try {
-        await this.speak(text || '');
+        if ('speechSynthesis' in window) {
+          const u = new SpeechSynthesisUtterance(text);
+          u.lang = 'es-ES';
+
+          // Voz en español si existe
+          const pickVoice = () => {
+            const voices = speechSynthesis.getVoices();
+            const v = voices.find(v => (v.lang || '').toLowerCase().startsWith('es'));
+            if (v) u.voice = v;
+          };
+          // En algunos navegadores las voces se cargan asincrónicas
+          pickVoice();
+          window.speechSynthesis.onvoiceschanged = pickVoice;
+
+          try { speechSynthesis.cancel(); } catch {}
+          this.speaking = true;
+          this.onLineCb?.(text);
+
+          u.onend = () => { this.speaking = false; this.onLineCb?.(null); resolve(); };
+          u.onerror = () => { this.speaking = false; this.onLineCb?.(null); resolve(); };
+          speechSynthesis.speak(u);
+          return;
+        }
       } catch {
-        if (mp3Url) await this.playMp3(mp3Url);
+        /* caer a MP3 */
       }
-    } catch {
-      // ignorar
-    } finally {
-      if (this.onLine) this.onLine(null);
-      try { await this.resumeRec?.(); } catch {}
-    }
+
+      // Fallback MP3
+      const a = new Audio(mp3Url);
+      const done = () => { this.onLineCb?.(null); resolve(); };
+      this.onLineCb?.(text);
+      a.addEventListener('ended', done, { once: true });
+      a.addEventListener('error', done, { once: true });
+      // Timeout de seguridad (si el audio falla)
+      setTimeout(done, 15000);
+      a.play().catch(done);
+    });
   }
 
-  async play(url: string): Promise<void> {
-    try { await this.pauseRec?.(); } catch {}
-    try { await this.playMp3(url); } catch {} 
-    finally { try { await this.resumeRec?.(); } catch {} }
+  play(mp3Url: string): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const a = new Audio(mp3Url);
+      const done = () => resolve();
+      a.addEventListener('ended', done, { once: true });
+      a.addEventListener('error', done, { once: true });
+      setTimeout(done, 15000);
+      a.play().catch(done);
+    });
   }
 
   setGregorian(on: boolean) {
@@ -117,10 +100,11 @@ class AudioSvc {
         this.bg.volume = 0.25;
       }
       this.bg.play().catch(() => {});
-    } else if (this.bg) {
-      try { this.bg.pause(); this.bg.currentTime = 0; } catch {}
+    } else {
+      if (this.bg) { try { this.bg.pause(); this.bg.currentTime = 0; } catch {} }
     }
   }
 }
 
 export const audio = new AudioSvc();
+export type AudioSvcT = AudioSvc;
