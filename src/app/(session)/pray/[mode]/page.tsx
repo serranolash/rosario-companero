@@ -1,227 +1,256 @@
-'use client';
+'use client'
 
-import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
-import { audio } from '@/lib/audio';
-import { recognition } from '@/lib/recognition';
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { audio } from '@/lib/audio'
+import { recognition } from '@/lib/recognition'
+import prayers from '@/data/prayers.es.json'
+import mysteriesData from '@/data/mysteries.es.json'
 
-/** Fases del rezo (simple y explícito para TS) */
-type Phase = 'IDLE' | 'INTRO' | 'ANNOUNCE' | 'RUNNING' | 'GLORIA' | 'DONE';
+type Phase = 'IDLE' | 'INTRO' | 'ANNOUNCE' | 'RUNNING' | 'DONE'
+type UICue = { title?: string; subtitle?: string } | null
+
+const MAX_DECADES = 5
+const autoHandsFree = true
+
+type Decade = { title: string; desc?: string; img?: string }
+type MysteryGroup = { id: string; title: string; days: string[]; decades?: Decade[] }
+
+const FALLBACK_DECADES: Record<string, string[]> = {
+  Gozosos: [
+    'La Encarnación del Hijo de Dios',
+    'La Visitación de Nuestra Señora a Santa Isabel',
+    'El Nacimiento del Hijo de Dios',
+    'La Presentación de Jesús en el Templo',
+    'El Niño Jesús perdido y hallado',
+  ],
+  Dolorosos: [
+    'La Oración de Jesús en el Huerto',
+    'La Flagelación del Señor',
+    'La Coronación de espinas',
+    'Jesús con la Cruz a cuestas',
+    'La Crucifixión y Muerte de Jesús',
+  ],
+  Gloriosos: [
+    'La Resurrección del Señor',
+    'La Ascensión del Señor',
+    'La Venida del Espíritu Santo',
+    'La Asunción de la Virgen',
+    'La Coronación de María Santísima',
+  ],
+  Luminosos: [
+    'El Bautismo en el Jordán',
+    'Las Bodas de Caná',
+    'El Anuncio del Reino',
+    'La Transfiguración',
+    'La Institución de la Eucaristía',
+  ],
+}
+
+function normalizeMysteries(raw: MysteryGroup[]): (MysteryGroup & { decades: Decade[] })[] {
+  return raw.map((m) => ({
+    ...m,
+    decades: m.decades?.length ? m.decades : (FALLBACK_DECADES[m.title] || []).map(t => ({ title: t })),
+  })) as any
+}
+function todayMysteryGroup() {
+  const d = new Date().getDay() // 0 dom
+  if (d === 1 || d === 6) return 'Gozosos'
+  if (d === 2 || d === 5) return 'Dolorosos'
+  if (d === 3 || d === 0) return 'Gloriosos'
+  return 'Luminosos'
+}
+function ordinal(n: number) {
+  return ['Primer','Segundo','Tercer','Cuarto','Quinto'][n-1] || `${n}º`
+}
+
+async function waitUser(kind: 'pn'|'ave'|'gloria') {
+  if (!autoHandsFree) return
+  await new Promise(r => setTimeout(r, 300))
+  await recognition.listen({
+    lang: 'es-AR',
+    minDurationMs: 3000,
+    endSilenceMs: 1600,
+    minChars: 24,
+    maxTotalMs: 28000,
+    silenceChecks: 2,
+  })
+}
 
 export default function PrayPage() {
-  const [started, setStarted] = useState(false);
-  const [phase, setPhase] = useState<Phase>('IDLE');
+  const [phase, setPhase] = useState<Phase>('IDLE')
+  const [decadeIdx, setDecadeIdx] = useState(0)
+  const [aveCount, setAveCount] = useState(0)
+  const [showLine, setShowLine] = useState<string | null>(null)
+  const [started, setStarted] = useState(false)
+  const [uiCue, setUiCue] = useState<UICue>(null)
 
-  /** Línea que “dice” la app (viene de audio.setOnLine) */
-  const [appLine, setAppLine] = useState<string | null>(null);
+  const groupTitle = useMemo(() => todayMysteryGroup(), [])
+  const mysteries = useMemo(() => normalizeMysteries(mysteriesData as any), [])
+  const mystery = useMemo(
+    () => (mysteries as any).find((m: any) => m.title === groupTitle) || (mysteries as any)[0],
+    [mysteries, groupTitle],
+  )
+  const decade = useMemo(() => mystery?.decades?.[decadeIdx], [mystery, decadeIdx])
 
-  /** Lo que la app va reconociendo del feligrés */
-  const [userPartial, setUserPartial] = useState('');
-  const [userFinal, setUserFinal] = useState('');
-
-  /** bandera simple para no encimar audios */
-  const busyRef = useRef(false);
-
-  /** Inicializa audio + engancha “línea hablada” */
   useEffect(() => {
-    audio.init();
-    audio.setOnLine((l) => setAppLine(l || ''));
-    return () => {
-      audio.stop();
-      recognition.stop();
-      audio.setOnLine(null);
-    };
-  }, []);
+    audio.init?.()
+    audio.setOnLine((l) => setShowLine(l))
+    return () => { try { recognition.stop() } catch {} }
+  }, [])
 
-  /** util: espera N ms */
-  const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+  // ----------- bloques lógicos -----------
 
-  /** Arranca el rosario completo (flujo mínimo y robusto) */
-  const startRosary = async () => {
-    if (busyRef.current) return;
-    busyRef.current = true;
-    setStarted(true);
-
+  async function runIntroBlock() {
+    setUiCue({ title: 'Inicio', subtitle: 'Recemos juntos' })
     try {
-      // ---------- INTRO ----------
-      setPhase('INTRO');
-
-      // Oraciones iniciales (acortadas para que no se corten en móviles)
-      await audio.sayOrPlay(
-        'Por la señal de la Santa Cruz. En el nombre del Padre, del Hijo y del Espíritu Santo. Amén.',
-        '/audio/intro/por-la-senal.mp3'
-      );
-      await audio.sayOrPlay(
-        'Señor, ábreme los labios. Y mi boca proclamará tu alabanza.',
-        '/audio/intro/abre-labios.mp3'
-      );
-      await audio.sayOrPlay(
-        'Dios mío, ven en mi auxilio. Señor, date prisa en socorrerme.',
-        '/audio/intro/ven-auxilio.mp3'
-      );
-
-      // ---------- ANUNCIO DEL MISTERIO ----------
-      setPhase('ANNOUNCE');
-      await audio.sayOrPlay(
-        'Primer misterio del día. Comencemos con el Padre Nuestro.',
-        '/audio/misterios/announce-next.mp3'
-      );
-
-      // ---------- MODO MANOS LIBRES (una decena de ejemplo) ----------
-      setPhase('RUNNING');
-
-      // 1) Espera la mitad del fiel: Padre Nuestro
-      await listenUserHalf('Padre Nuestro');
-
-      // 2) Responde la mitad de la app (Padre Nuestro parte 2)
-      await audio.sayOrPlay(
-        'Amén.',
-        '/audio/padre-nuestro/amen.mp3'
-      );
-
-      // 3) Ahora Ave María ×10 (usuario/app alternan)
-      for (let i = 0; i < 10; i++) {
-        await listenUserHalf(`Ave María ${i + 1}`);
-        await audio.sayOrPlay(
-          'Santa María, Madre de Dios, ruega por nosotros, pecadores, ahora y en la hora de nuestra muerte. Amén.',
-          '/audio/avemaria/santa-maria.mp3'
-        );
+      if ((prayers as any).por_la_senal) await audio.sayChunks((prayers as any).por_la_senal)
+      if ((prayers as any).acto_contricion) await audio.sayChunks((prayers as any).acto_contricion)
+      if ((prayers as any).abre_labios?.peticion) {
+        await audio.sayChunks((prayers as any).abre_labios.peticion)
+        await audio.sayChunks((prayers as any).abre_labios.respuesta)
       }
+      if ((prayers as any).ven_auxilio?.peticion) {
+        await audio.sayChunks((prayers as any).ven_auxilio.peticion)
+        await audio.sayChunks((prayers as any).ven_auxilio.respuesta)
+      }
+      if ((prayers as any).gloria?.parte1) await audio.sayChunks((prayers as any).gloria.parte1)
+      if ((prayers as any).gloria?.parte2) await audio.sayChunks((prayers as any).gloria.parte2)
+    } catch {}
+    setUiCue(null)
+  }
 
-      // ---------- GLORIA + MARÍA MADRE DE GRACIA + OH JESÚS MÍO ----------
-      setPhase('GLORIA');
-      await audio.sayOrPlay(
-        'Gloria al Padre y al Hijo y al Espíritu Santo.',
-        '/audio/gloria/parte1.mp3'
-      );
-      await audio.sayOrPlay(
-        'Como era en el principio, ahora y siempre, por los siglos de los siglos. Amén.',
-        '/audio/gloria/parte2.mp3'
-      );
-      await audio.sayOrPlay(
-        'María, Madre de gracia y Madre de misericordia, defiéndenos de nuestros enemigos, y ampáranos ahora y en la hora de nuestra muerte. Amén.',
-        '/audio/extras/maria-madre.mp3'
-      );
-      await audio.sayOrPlay(
-        'Oh Jesús mío, perdona nuestros pecados, líbranos del fuego del infierno, lleva al cielo a todas las almas, especialmente a las más necesitadas de tu misericordia.',
-        '/audio/extras/oh-jesus-mio.mp3'
-      );
+  async function runOneDecade() {
+    const title = mystery?.title || ''
+    const dTitle = decade?.title || ''
+    setPhase('ANNOUNCE')
+    try { await audio.sayChunks(`${ordinal(decadeIdx + 1)} misterio ${title}: ${dTitle}.`) } catch {}
 
-      // Aquí podrías encadenar los otros 4 misterios con el mismo patrón
-      // (ANNOUNCE → RUNNING con PN/Ave x10 → GLORIA), o navegar a una
-      // segunda pantalla que continúe la secuencia.
+    setUiCue({ title: 'Padre Nuestro', subtitle: 'Tu parte primero…' })
+    await waitUser('pn')
+    await audio.sayChunks((prayers as any).padre_nuestro?.parte2 ?? 'Amén.')
 
-      setPhase('DONE');
-      await audio.sayOrPlay(
-        'Sesión finalizada. Gracias por rezar.',
-        '/audio/extras/gracias.mp3'
-      );
-    } catch {
-      // si algo falla, no reventar
-    } finally {
-      recognition.stop();
-      busyRef.current = false;
+    for (let i = 0; i < 10; i++) {
+      setAveCount(i)
+      setUiCue({ title: `Ave María (${i+1}/10)`, subtitle: 'Tu parte primero…' })
+      await waitUser('ave')
+      await audio.sayChunks((prayers as any).ave_maria?.parte2 ?? 'Santa María, Madre de Dios…')
+      setAveCount(i + 1)
     }
-  };
 
-  /**
-   * Espera la mitad del fiel en manos libres:
-   * — comienza a escuchar
-   * — muestra parcial
-   * — cuando el reconocimiento emite resultado final que contiene un “ender”
-   *   (Amén, Gloria al Padre, etc.), se resuelve y para de escuchar.
-   */
-  const listenUserHalf = async (label: string) => {
-    return new Promise<void>((resolve) => {
-      setUserPartial('');
-      setUserFinal('');
+    setUiCue({ title: 'Gloria', subtitle: 'Tu parte…' })
+    await waitUser('gloria')
+    await audio.sayChunks((prayers as any).gloria?.parte2 ?? 'Como era en el principio…')
 
-      recognition.onPartial((t) => setUserPartial(t));
-      recognition.onFinal((t) => setUserFinal(t));
+    const madre = (prayers as any)['maria_madre_de_gracia']
+    const oh = (prayers as any)['oh_jesus_mio']
+    if (madre) await audio.sayChunks(madre)
+    if (oh) await audio.sayChunks(oh)
 
-      // arrancar escucha
-      recognition.start();
+    setUiCue(null)
 
-      // *Reconocimiento* ya tiene su propia lógica: cuando detecta un “ender”
-      // detiene la escucha. Aquí chequeamos periódicamente si paró.
-      const check = async () => {
-        // damos tiempo de colchón para que no se adelante
-        if (!recognition.isListening()) {
-          await sleep(250); // mini pausa
-          resolve();
-          return;
-        }
-        requestAnimationFrame(check);
-      };
-      requestAnimationFrame(check);
-    });
-  };
+    const next = decadeIdx + 1
+    if (next < MAX_DECADES) { setDecadeIdx(next); setAveCount(0) }
+  }
 
-  // ------------------ UI ------------------
+  async function runAllDecades() {
+    setPhase('RUNNING')
+    for (let d = decadeIdx; d < MAX_DECADES; d++) {
+      await runOneDecade()
+    }
+  }
+
+  async function startSessionFull() {
+    if (started) return
+    setStarted(true); setPhase('INTRO')
+    try {
+      await audio.init()
+      await recognition.prepare()
+      await runIntroBlock()
+      setPhase('RUNNING')
+      await runAllDecades()
+      setPhase('DONE')
+    } catch { setPhase('DONE') }
+  }
+
+  async function startSessionSingle() {
+    if (started) return
+    setStarted(true); setPhase('INTRO')
+    try {
+      await audio.init()
+      await recognition.prepare()
+      await runIntroBlock()
+      setPhase('RUNNING')
+      await runOneDecade()
+      setPhase('DONE')
+    } catch { setPhase('DONE') }
+  }
+
+  // ----------------- UI -----------------
   return (
-    <main className="container mx-auto px-4 pb-16">
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/" className="text-sm underline">&larr; Volver</Link>
-        <h1 className="text-2xl md:text-3xl font-extrabold">Rezar</h1>
+    <main className="container mx-auto px-4 py-6">
+      <div className="flex items-center gap-3 mb-4">
+        <Link href="/" className="text-sm underline">← Volver</Link>
+        <h1 className="text-2xl md:text-3xl font-extrabold">Rezo del Rosario</h1>
       </div>
 
-      {started ? (
-        <>
-          <div className="card mb-4">
-            {phase === 'INTRO'    && <p>Preparando audio y micrófono…</p>}
-            {phase === 'ANNOUNCE' && <p>Anunciando el misterio…</p>}
-            {phase === 'RUNNING'  && (
-              <p><b>Manos libres:</b> la app escucha tu mitad y responde automáticamente.</p>
-            )}
-            {phase === 'GLORIA'   && <p>Gloria y oraciones finales de la decena…</p>}
-            {phase === 'DONE'     && <p><b>Sesión finalizada.</b> Gracias por rezar.</p>}
-          </div>
+      {showLine && (
+        <div className="card mb-4">
+          <p className="text-lg leading-relaxed">{showLine}</p>
+          <p className="text-sm muted">Recitemos juntos esta parte.</p>
+        </div>
+      )}
 
-          {/* Línea que dice la app (TTS) */}
-          {appLine && (
-            <div className="card mb-4">
-              <div className="badge mb-2">Rosario Compañero</div>
-              <p>{appLine}</p>
-            </div>
-          )}
+      {uiCue && (
+        <div className="card mb-4">
+          {uiCue.title && <p className="text-lg font-semibold">{uiCue.title}</p>}
+          {uiCue.subtitle && <p className="muted">{uiCue.subtitle}</p>}
+        </div>
+      )}
 
-          {/* Lo que va diciendo el feligrés */}
-          {(userPartial || userFinal) && (
-            <div className="card mb-4">
-              <div className="badge mb-2">Tu voz</div>
-              {userFinal ? (
-                <p><b>Final:</b> {userFinal}</p>
-              ) : (
-                <p className="muted"><i>Escuchando…</i> {userPartial}</p>
-              )}
-            </div>
-          )}
+      <div className="card mb-4">
+        <p className="mb-2"><b>Misterio del día:</b> {mystery?.title}</p>
+        <p className="mb-2"><b>Decena:</b> {Math.min(decadeIdx + 1, MAX_DECADES)} / {MAX_DECADES}</p>
+        {decade && (
+          <>
+            <p><b>Título:</b> {decade.title}</p>
+            {decade.desc && <p className="muted mt-1">{decade.desc}</p>}
+          </>
+        )}
+        <p className="mt-2 text-sm text-gray-600">Ave Marías de esta decena: {aveCount}/10</p>
+      </div>
 
-          {/* Controles de seguridad */}
-          <div className="flex gap-3">
-            <button
-              className="btn btn-secondary"
-              onClick={() => { try { recognition.stop(); } catch {} }}
-            >
-              Detener escucha
+      {!started && (
+        <div className="card mb-4">
+          <p className="mb-3">Toca una opción para preparar audio y micrófono, y comenzar en modo manos libres:</p>
+          <div className="flex flex-wrap gap-3">
+            <button className="btn btn-primary" onClick={startSessionFull}>
+              Rezar el rosario completo
             </button>
-
-            <button
-              className="btn btn-secondary"
-              onClick={() => { if (!busyRef.current) startRosary(); }}
-            >
-              Reintentar paso
+            <button className="btn" onClick={startSessionSingle}>
+              Rezar una decena
             </button>
           </div>
-        </>
-      ) : (
-        <div className="card">
-          <p className="mb-4">Presioná para comenzar el rosario en modo manos libres.</p>
-          <button className="btn btn-primary" onClick={startRosary}>
-            Rezar ahora
+          <p className="mt-3 text-xs text-gray-500">* En móviles, el audio sólo se habilita tras un toque del usuario.</p>
+        </div>
+      )}
+
+      {started && (
+        <div className="card mb-4">
+          {phase === 'INTRO' && <p>Preparando audio y micrófono…</p>}
+          {phase === 'ANNOUNCE' && <p>Anunciando el misterio…</p>}
+          {phase === 'RUNNING' && <p><b>Modo manos libres activo:</b> la app escucha tu mitad y responde automáticamente.</p>}
+          {phase === 'DONE' && <p><b>¡Sesión finalizada!</b> Gracias por rezar.</p>}
+        </div>
+      )}
+
+      {started && (
+        <div className="flex gap-3">
+          <button className="btn btn-secondary" onClick={() => { try { recognition.stop() } catch {} }}>
+            Detener escucha
           </button>
         </div>
       )}
     </main>
-  );
+  )
 }

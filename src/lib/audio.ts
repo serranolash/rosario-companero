@@ -1,52 +1,15 @@
 // src/lib/audio.ts
-// TTS/Audio robusto con init(), setOnLine(), sayOrPlay(), sayChunks(), stop().
-
-type OnLine = ((line: string | null) => void) | null;
-
-function splitIntoChunks(text: string, max = 180): string[] {
-  // Divide por puntuación; si un bloque supera max, lo trocea por espacios.
-  const parts = text
-    .replace(/\s+/g, ' ')
-    .trim()
-    .split(/([.!?;:])\s+/)
-    .reduce<string[]>((acc, cur, i, arr) => {
-      if (i % 2 === 0) {
-        const end = arr[i + 1] || '';
-        acc.push((cur + (end ? end + ' ' : '')).trim());
-      }
-      return acc;
-    }, [])
-    .filter(Boolean);
-
-  const out: string[] = [];
-  for (const p of parts) {
-    if (p.length <= max) { out.push(p); continue; }
-    let tmp = p;
-    while (tmp.length > max) {
-      const cut = tmp.lastIndexOf(' ', max);
-      if (cut <= 0) break;
-      out.push(tmp.slice(0, cut));
-      tmp = tmp.slice(cut + 1);
-    }
-    if (tmp) out.push(tmp);
-  }
-  return out;
-}
-
 class AudioSvc {
   private ctx: AudioContext | null = null;
   private bg: HTMLAudioElement | null = null;
-  private onLine: OnLine = null;
-
-  setOnLine(cb: OnLine) { this.onLine = cb; }
+  private onLineCb: ((line: string | null) => void) | null = null;
 
   async init() {
     try {
       // @ts-ignore
-      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
       if (Ctx && !this.ctx) this.ctx = new Ctx();
 
-      // Desbloqueo móvil
       const unlock = () => {
         try { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); } catch {}
         document.removeEventListener('touchstart', unlock);
@@ -54,68 +17,116 @@ class AudioSvc {
       };
       document.addEventListener('touchstart', unlock, { once: true });
       document.addEventListener('click', unlock, { once: true });
-
-      // Warm-up TTS (cargar voces)
-      try { window.speechSynthesis?.getVoices?.(); } catch {}
     } catch {}
   }
 
-  sayOrPlay(text: string, mp3Url?: string): Promise<void> {
-    // Notifica a la UI lo que “dice” la app
-    try { this.onLine?.(text); } catch {}
+  /** Permite a la UI mostrar la línea que se está recitando. */
+  setOnLine(cb: (line: string | null) => void) {
+    this.onLineCb = cb;
+  }
 
+  /** Habla un texto con TTS (si hay) o MP3 de respaldo.  */
+  sayOrPlay(text: string, mp3Url?: string): Promise<void> {
     return new Promise<void>((resolve) => {
-      // 1) TTS preferente
+      // Preferir TTS
       try {
-        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        if ('speechSynthesis' in window) {
           const u = new SpeechSynthesisUtterance(text);
           u.lang = 'es-ES';
-          const voices = (window.speechSynthesis.getVoices?.() || []) as SpeechSynthesisVoice[];
+          const voices = speechSynthesis.getVoices();
           const v = voices.find(v => (v.lang || '').toLowerCase().startsWith('es'));
           if (v) u.voice = v;
-          try { window.speechSynthesis.cancel(); } catch {}
-          u.onend = () => { try { this.onLine?.(null); } catch {} ; resolve(); };
-          u.onerror = () => { try { this.onLine?.(null); } catch {} ; resolve(); };
-          window.speechSynthesis.speak(u);
+
+          // avisar a la UI qué línea se está diciendo
+          this.onLineCb?.(text);
+          u.onend = () => { this.onLineCb?.(null); resolve(); };
+          u.onerror = () => { this.onLineCb?.(null); resolve(); };
+
+          // cancelar cualquier TTS anterior (evita solapado)
+          try { speechSynthesis.cancel(); } catch {}
+          speechSynthesis.speak(u);
           return;
         }
-      } catch { /* fall through */ }
-
-      // 2) Fallback MP3 (si se pasó URL)
-      if (mp3Url) {
-        const a = new Audio(mp3Url);
-        const done = () => { try { this.onLine?.(null); } catch {} ; resolve(); };
-        a.addEventListener('ended', done, { once: true });
-        a.addEventListener('error', done, { once: true });
-        setTimeout(done, 12000);
-        a.play().catch(done);
-        return;
+      } catch {
+        /* caer al MP3 */
       }
 
-      // 3) Sin TTS ni MP3 → resolver igual
-      try { this.onLine?.(null); } catch {}
-      resolve();
+      // Fallback MP3
+      if (!mp3Url) { resolve(); return; }
+      const a = new Audio(mp3Url);
+      const done = () => { this.onLineCb?.(null); resolve(); };
+      a.addEventListener('ended', done, { once: true });
+      a.addEventListener('error', done, { once: true });
+      this.onLineCb?.(text);
+      // timeout de seguridad
+      setTimeout(done, Math.max(8000, Math.min(20000, text.length * 120)));
+      a.play().catch(done);
     });
   }
 
-  /** Dice un texto largo en trozos, evitando cortes del TTS. */
-  async sayChunks(text: string, mp3Base?: string) {
-    const chunks = splitIntoChunks(text);
-    for (let i = 0; i < chunks.length; i++) {
-      const mp3 = mp3Base ? `${mp3Base}.${i + 1}.mp3` : undefined;
-      await this.sayOrPlay(chunks[i], mp3);
-      // micro pausa natural
-      await new Promise((r) => setTimeout(r, 120));
+  /** Divide un texto largo en trozos y los dice en secuencia (evita cortes). */
+  async sayChunks(text: string) {
+    const chunks = this.chunkText(text);
+    for (const c of chunks) {
+      await this.sayOrPlay(c);
     }
   }
 
-  stop() {
-    try { window.speechSynthesis?.cancel?.(); } catch {}
-    try { this.onLine?.(null); } catch {}
-    if (this.bg) {
-      try { this.bg.pause(); this.bg.currentTime = 0; } catch {}
+  private chunkText(text: string): string[] {
+    const clean = (text || '')
+      .replace(/\s+/g, ' ')
+      .replace(/ ?<br\s*\/?> ?/gi, ' ')
+      .trim();
+
+    // dividir por frases / puntos y comas
+    const raw = clean.split(/([\.!?;:])\s+/).reduce<string[]>((acc, cur, i, arr) => {
+      if (i % 2 === 0) {
+        const punct = arr[i + 1] || '';
+        acc.push((cur + (punct || '')).trim());
+      }
+      return acc;
+    }, []).filter(Boolean);
+
+    // agrupar para no pasar ~140-160 chars
+    const out: string[] = [];
+    let buf = '';
+    for (const seg of (raw.length ? raw : [clean])) {
+      if ((buf + ' ' + seg).trim().length > 160) {
+        if (buf) out.push(buf.trim());
+        buf = seg;
+      } else {
+        buf = (buf ? buf + ' ' : '') + seg;
+      }
+    }
+    if (buf) out.push(buf.trim());
+    return out;
+  }
+
+  play(mp3Url: string): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const a = new Audio(mp3Url);
+      const done = () => resolve();
+      a.addEventListener('ended', done, { once: true });
+      a.addEventListener('error', done, { once: true });
+      setTimeout(done, 12000);
+      a.play().catch(done);
+    });
+  }
+
+  setGregorian(on: boolean) {
+    const url = '/audio/gregoriano/loop.mp3';
+    if (on) {
+      if (!this.bg) {
+        this.bg = new Audio(url);
+        this.bg.loop = true;
+        this.bg.volume = 0.2;
+      }
+      this.bg.play().catch(() => {});
+    } else {
+      if (this.bg) { try { this.bg.pause(); this.bg.currentTime = 0; } catch {} }
     }
   }
 }
 
 export const audio = new AudioSvc();
+export type AudioSvcType = AudioSvc;
