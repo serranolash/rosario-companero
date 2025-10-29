@@ -11,9 +11,10 @@ class AudioSvc {
   async init() {
     try {
       // @ts-ignore
-      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
       if (Ctx && !this.ctx) this.ctx = new Ctx();
 
+      // Desbloqueo en móviles
       const unlock = () => {
         try { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); } catch {}
         document.removeEventListener('touchstart', unlock);
@@ -24,20 +25,18 @@ class AudioSvc {
     } catch {}
   }
 
-  /** Permite que la UI muestre/limpie la línea que se esté “diciendo”. */
   setOnLine(cb: OnLineFn | null) {
     this.onLineCb = cb;
   }
 
-  /** Cancela cualquier TTS en curso. */
   stop() {
     try { window.speechSynthesis?.cancel(); } catch {}
     this.speaking = false;
     this.onLineCb?.(null);
   }
 
-  /** Habla con TTS y, si no está disponible, reproduce MP3. */
-  sayOrPlay(text: string, mp3Url: string): Promise<void> {
+  /** TTS preferente con fallback a audio MP3 (si se provee) */
+  sayOrPlay(text: string, mp3Url?: string): Promise<void> {
     return new Promise<void>((resolve) => {
       // Preferir TTS
       try {
@@ -45,13 +44,11 @@ class AudioSvc {
           const u = new SpeechSynthesisUtterance(text);
           u.lang = 'es-ES';
 
-          // Voz en español si existe
           const pickVoice = () => {
             const voices = speechSynthesis.getVoices();
             const v = voices.find(v => (v.lang || '').toLowerCase().startsWith('es'));
             if (v) u.voice = v;
           };
-          // En algunos navegadores las voces se cargan asincrónicas
           pickVoice();
           window.speechSynthesis.onvoiceschanged = pickVoice;
 
@@ -68,15 +65,19 @@ class AudioSvc {
         /* caer a MP3 */
       }
 
-      // Fallback MP3
-      const a = new Audio(mp3Url);
-      const done = () => { this.onLineCb?.(null); resolve(); };
-      this.onLineCb?.(text);
-      a.addEventListener('ended', done, { once: true });
-      a.addEventListener('error', done, { once: true });
-      // Timeout de seguridad (si el audio falla)
-      setTimeout(done, 15000);
-      a.play().catch(done);
+      // Fallback MP3 si se pasó URL
+      if (mp3Url) {
+        const a = new Audio(mp3Url);
+        const done = () => { this.onLineCb?.(null); resolve(); };
+        this.onLineCb?.(text);
+        a.addEventListener('ended', done, { once: true });
+        a.addEventListener('error', done, { once: true });
+        setTimeout(done, 15000);
+        a.play().catch(done);
+      } else {
+        // Si no hay TTS ni MP3, resolvemos igual para no colgar flujo
+        resolve();
+      }
     });
   }
 
@@ -104,6 +105,49 @@ class AudioSvc {
       if (this.bg) { try { this.bg.pause(); this.bg.currentTime = 0; } catch {} }
     }
   }
+
+  /** Nuevo: habla en "chunks" para textos largos y evitar cortes */
+  async sayChunks(textOrLines: string | string[]): Promise<void> {
+    const lines: string[] = Array.isArray(textOrLines)
+      ? textOrLines
+      : splitInChunks(textOrLines, 160);
+
+    for (const line of lines) {
+      const clean = line.trim();
+      if (!clean) continue;
+      await this.sayOrPlay(clean);
+      // pequeña pausa natural entre frases
+      await pause(250);
+    }
+  }
+}
+
+function pause(ms: number) {
+  return new Promise(res => setTimeout(res, ms));
+}
+
+/** Divide por puntuación y asegura longitud máxima aproximada */
+function splitInChunks(text: string, maxLen = 160): string[] {
+  const raw = text
+    .replace(/\s+/g, ' ')
+    .split(/(?<=[\.\!\?\:;])\s+/g);
+
+  const chunks: string[] = [];
+  for (const seg of raw) {
+    if (seg.length <= maxLen) { chunks.push(seg); continue; }
+    // Si una frase supera el máximo, la troceamos duramente por palabras
+    let cur = '';
+    for (const w of seg.split(' ')) {
+      if ((cur + ' ' + w).trim().length > maxLen) {
+        if (cur.trim()) chunks.push(cur.trim());
+        cur = w;
+      } else {
+        cur = (cur ? cur + ' ' : '') + w;
+      }
+    }
+    if (cur.trim()) chunks.push(cur.trim());
+  }
+  return chunks;
 }
 
 export const audio = new AudioSvc();

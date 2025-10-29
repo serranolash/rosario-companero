@@ -1,93 +1,134 @@
 // src/lib/recognition.ts
+export type ListenConfig = {
+  lang?: string;
+  minDurationMs?: number;   // mínimo hablando (default 2800)
+  endSilenceMs?: number;    // silencio final requerido (default 1500)
+  minChars?: number;        // texto mínimo (default 22)
+  interimAllowed?: boolean; // acumular interinos (default true)
+  maxTotalMs?: number;      // corte duro (default 25000)
+  silenceChecks?: number;   // cuántos chequeos de silencio seguidos (default 2)
+};
 
-export type PartialCb = (text: string) => void;
-export type FinalCb = (text: string) => void;
-
-/** Palabras/fragmentos que, al oírlos, marcan “usuario terminó” */
-const DEFAULT_ENDERS = [
-  /am[eé]n\b/i,
-  /gloria al padre/i,
-  /jes[uú]s/i,
-  /santa mar[ií]a/i,
-  /como era en el principio/i
-];
+type SR = any;
 
 class RecognitionSvc {
-  private rec: SpeechRecognition | null = null;
-  private listening = false;
-
-  private partialCb: PartialCb | null = null;
-  private finalCb: FinalCb | null = null;
-
-  private enders: RegExp[] = DEFAULT_ENDERS;
+  private SRClass: SR | null = null;
+  private sr: any | null = null;
+  private prepared = false;
 
   constructor() {
     // @ts-ignore
-    const SR: typeof SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SR) {
-      this.rec = new SR();
-      this.rec.lang = 'es-ES';
-      this.rec.continuous = true;
-      this.rec.interimResults = true;
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    this.SRClass = SR || null;
+  }
 
-      this.rec.onresult = (e: SpeechRecognitionEvent) => {
-        let interim = '';
-        let final = '';
+  supported() { return !!this.SRClass; }
+  isPrepared() { return this.prepared; }
 
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const res = e.results[i];
-          const txt = res[0]?.transcript || '';
-          if (res.isFinal) final += txt;
-          else interim += txt;
-        }
-
-        if (interim && this.partialCb) this.partialCb(interim.trim());
-        if (final) {
-          const clean = final.trim();
-          this.finalCb?.(clean);
-
-          // ¿terminó la mitad del fiel?
-          if (this.enders.some(rx => rx.test(clean))) {
-            // paramos para dar paso a la respuesta de la app
-            this.stop();
-          }
-        }
-      };
-
-      // reintento simple ante fin/errores si seguimos “escuchando”
-      const tryRestart = () => { if (this.listening) this.safeStart(); };
-      this.rec.onend = tryRestart;
-      this.rec.onerror = tryRestart;
+  async prepare(): Promise<boolean> {
+    if (this.prepared) return true;
+    try {
+      if (navigator.mediaDevices?.getUserMedia) {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+      this.prepared = true;
+      return true;
+    } catch {
+      this.prepared = false;
+      return false;
     }
   }
 
-  /** Define palabras/regex que disparan “fin del usuario” */
-  setEnders(patterns: (RegExp | string)[]) {
-    this.enders = patterns.map(p => (p instanceof RegExp ? p : new RegExp(p, 'i')));
-  }
-
-  onPartial(cb: PartialCb | null) { this.partialCb = cb; }
-  onFinal(cb: FinalCb | null) { this.finalCb = cb; }
-
-  private safeStart() {
-    try { this.rec?.start(); } catch {}
-  }
-
-  start() {
-    if (!this.rec) return;
-    if (this.listening) return;
-    this.listening = true;
-    this.safeStart();
-  }
-
+  /** Stop público para usar desde la UI */
   stop() {
-    if (!this.rec) return;
-    this.listening = false;
-    try { this.rec.stop(); } catch {}
+    try { this.sr?.stop?.(); } catch {}
+    this.sr = null;
   }
 
-  /** ¿Está activo? */
-  isListening() { return this.listening; }
+  private safeStop() {
+    try { this.sr?.stop?.(); } catch {}
+    this.sr = null;
+  }
+
+  async listen(cfg: ListenConfig = {}): Promise<string> {
+    if (!this.SRClass) return '';
+
+    const {
+      lang = 'es-AR',
+      minDurationMs = 2800,
+      endSilenceMs = 1500,
+      minChars = 22,
+      interimAllowed = true,
+      maxTotalMs = 25000,
+      silenceChecks = 2,
+    } = cfg;
+
+    if (!this.prepared) {
+      const ok = await this.prepare();
+      if (!ok) return '';
+    }
+
+    this.safeStop();
+    this.sr = new (this.SRClass as any)();
+    this.sr.lang = lang;
+    this.sr.continuous = true;
+    this.sr.interimResults = interimAllowed;
+
+    let transcript = '';
+    let firstResultAt = 0;
+    let lastSpeechAt = 0;
+    let hardTimer: number | null = null;
+    let checkTimer: number | null = null;
+    let consecutiveSilenceOK = 0;
+
+    const cleanup = () => {
+      if (hardTimer) { clearTimeout(hardTimer); hardTimer = null; }
+      if (checkTimer) { clearInterval(checkTimer); checkTimer = null; }
+      this.safeStop();
+    };
+
+    return new Promise<string>((resolve) => {
+      const finalize = () => { cleanup(); resolve(transcript.trim()); };
+
+      this.sr.onresult = (ev: any) => {
+        if (!firstResultAt) firstResultAt = Date.now();
+
+        let chunk = '';
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          const res = ev.results[i];
+          const part = res[0]?.transcript ?? '';
+          if (res.isFinal || interimAllowed) chunk += part + ' ';
+        }
+        if (chunk) {
+          transcript = (transcript + ' ' + chunk).replace(/\s+/g, ' ');
+          lastSpeechAt = Date.now();
+        }
+      };
+
+      this.sr.onerror = () => finalize();
+      this.sr.onend   = () => finalize();
+
+      // Chequeo periódico de silencio + duración + longitud
+      const tick = () => {
+        const now = Date.now();
+        const durOk = firstResultAt && (now - firstResultAt) >= minDurationMs;
+        const txtOk = transcript.trim().length >= minChars;
+        const silenceOk = lastSpeechAt && (now - lastSpeechAt) >= endSilenceMs;
+
+        if (durOk && txtOk && silenceOk) {
+          consecutiveSilenceOK += 1;
+          if (consecutiveSilenceOK >= silenceChecks) finalize();
+        } else {
+          consecutiveSilenceOK = 0;
+        }
+      };
+
+      checkTimer = window.setInterval(tick, 200);
+      hardTimer  = window.setTimeout(() => finalize(), maxTotalMs);
+
+      try { this.sr.start(); } catch { finalize(); }
+    });
+  }
 }
 
 export const recognition = new RecognitionSvc();
