@@ -2,6 +2,15 @@
 
 import Link from 'next/link';
 import mysteriesJson from '@/data/mysteries.es.json';
+// p.ej. en src/app/(public)/page.tsx o en layout client
+import { useEffect } from 'react'
+import { initPWAUpdatePrompt } from '@/lib/pwa'
+
+
+  
+
+
+
 
 type Group = {
   id: 'gozosos' | 'dolorosos' | 'gloriosos' | 'luminosos' | string;
@@ -48,7 +57,8 @@ function buildImageCandidates(g: Group) {
 
 export default function HomePage() {
   const all = mysteriesJson as Group[];
-  const wanted = groupKeyForToday();
+  const wanted = groupKeyForToday();  
+  useEffect(() => { initPWAUpdatePrompt() }, [])
 
   const group =
     all.find(g => (g.id || '').toLowerCase() === wanted) ||
