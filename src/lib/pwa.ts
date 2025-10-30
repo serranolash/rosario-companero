@@ -1,36 +1,47 @@
 // src/lib/pwa.ts
-let _swRegistered = false;
+'use client';
 
-export async function registerSW() {
-  if (_swRegistered) return;               // guardia en memoria del módulo
+// Registra el SW solo en PRODUCCIÓN y con flujo de update seguro
+export function registerSW() {
   if (typeof window === 'undefined') return;
   if (!('serviceWorker' in navigator)) return;
+  if (process.env.NODE_ENV !== 'production') return;
 
-  try {
-    await navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
-    _swRegistered = true;
-    // opcional: console.log('[PWA] SW registrado');
-  } catch (err) {
-    console.error('[PWA] Error registrando SW:', err);
-  }
-}
+  // Añade query de versión para bust
+  const swUrl = '/service-worker.js?v=v11';
 
-// Este helper NO vuelve a registrar, sólo puede escuchar/avisar de updates.
-export function initPWAUpdatePrompt(onUpdate?: () => void) {
-  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register(swUrl)
+      .then((registration) => {
+        let refreshing = false;
 
-  navigator.serviceWorker.getRegistration().then((reg) => {
-    if (!reg) return;
+        // Si el controlador cambia, recarga UNA sola vez
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
 
-    // When a new SW is waiting to activate, podés disparar un toast/modal:
-    reg.addEventListener('updatefound', () => {
-      const newSW = reg.installing;
-      if (!newSW) return;
-      newSW.addEventListener('statechange', () => {
-        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-          onUpdate?.();
+        // Si ya hay uno "waiting", pídeles que active (una vez)
+        if (registration.waiting) {
+          registration.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
+
+        // Cuando haya update, espera hasta que instale y entonces salta
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          if (!newWorker) return;
+
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && registration.waiting) {
+              registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        });
+      })
+      .catch(() => {
+        // silencioso
       });
-    });
   });
 }

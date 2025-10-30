@@ -7,11 +7,6 @@ import { useEffect } from 'react'
 import { initPWAUpdatePrompt } from '@/lib/pwa'
 
 
-  
-
-
-
-
 type Group = {
   id: 'gozosos' | 'dolorosos' | 'gloriosos' | 'luminosos' | string;
   title: string;
