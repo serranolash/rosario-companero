@@ -1,20 +1,20 @@
 // public/service-worker.js
-// Versión: cambia este valor cuando quieras forzar actualización
-const SW_VERSION = 'v11';
+// Incrementa esta versión cuando quieras forzar actualización
+const SW_VERSION = 'v12';
 
-// Solo haz skipWaiting si el cliente lo pide explícitamente
+// Solo haz skipWaiting cuando el cliente lo solicite
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
 });
 
-// Toma control de inmediato al activar (sin recargar en loop)
+// Reclama control al activar (sin recarga en bucle)
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
-// ---- Opcional: Workbox sólo para estáticos (NO cachear navegaciones HTML) ----
+// --- Workbox para assets, sin cachear HTML de navegación ---
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.5.4/workbox-sw.js');
 
 if (self.workbox) {
@@ -38,7 +38,7 @@ if (self.workbox) {
     })
   );
 
-  // Audio → Cache First
+  // Audios → Cache First
   registerRoute(
     ({ request }) => request.destination === 'audio',
     new CacheFirst({
@@ -50,10 +50,11 @@ if (self.workbox) {
     })
   );
 
-  // JS/CSS de Next → SWR (no navegs)
+  // JS/CSS/_next → SWR
   registerRoute(
     ({ request, url }) =>
-      (request.destination === 'script' || request.destination === 'style') ||
+      request.destination === 'script' ||
+      request.destination === 'style' ||
       url.pathname.startsWith('/_next/'),
     new StaleWhileRevalidate({
       cacheName: `next-assets-${SW_VERSION}`,
@@ -61,5 +62,5 @@ if (self.workbox) {
     })
   );
 
-  // MUY IMPORTANTE: NO cachear documentos HTML (navegaciones)
+  // IMPORTANTE: NO cacheamos documentos HTML (navegaciones)
 }
