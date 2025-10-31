@@ -1,148 +1,227 @@
-// src/app/(public)/news/admin/page.tsx
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-
-export const dynamic = 'force-dynamic' as const
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 type NewsItem = {
-  id: string
-  title: string
-  body: string
-  image?: string
-  createdAt: string
-  author?: string
-}
+  id: string;
+  title: string;
+  body: string;
+  imageUrl?: string;
+  videoUrl?: string;
+  createdAt: string;
+  author?: string;
+};
+
+const TOKEN_KEY = 'news_admin_token';
 
 export default function NewsAdminPage() {
-  const [user, setUser] = useState('')
-  const [pass, setPass] = useState('')
-  const [ok, setOk] = useState(false)
-
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [image, setImage] = useState('')
-  const [author, setAuthor] = useState('')
-  const [items, setItems] = useState<NewsItem[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const U = process.env.NEXT_PUBLIC_NEWS_ADMIN_USER || ''
-  const P = process.env.NEXT_PUBLIC_NEWS_ADMIN_PASS || ''
+  const [token, setToken] = useState('');
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [author, setAuthor] = useState('Admin');
+  const [image, setImage] = useState<File | null>(null);
+  const [video, setVideo] = useState<File | null>(null);
+  const [items, setItems] = useState<NewsItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    // intentar autocompletar si el build “inyecta” valores (sólo a modo display; seguridad real está en el POST del API)
-    // no pongas los valores reales por defecto — se ingresan a mano
-  }, [])
+    const saved = localStorage.getItem(TOKEN_KEY);
+    if (saved) setToken(saved);
+    load();
+  }, []);
 
   async function load() {
-    setLoading(true)
-    const res = await fetch('/api/news', {
-      cache: 'no-store',
-      headers: { 'x-no-cache': Date.now().toString() },
-    })
-    const data = await res.json()
-    setItems(data.items || [])
-    setLoading(false)
-  }
-
-  async function onLogin(e: React.FormEvent) {
-    e.preventDefault()
-    setOk(user === U && pass === P)
-    if (user === U && pass === P) await load()
-  }
-
-  async function addNews(e: React.FormEvent) {
-    e.preventDefault()
-    if (!ok) return alert('No autenticado')
-
-    const res = await fetch('/api/news', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-admin-user': user, 'x-admin-pass': pass },
-      body: JSON.stringify({ title, body, image: image || undefined, author: author || undefined }),
-    })
-    if (!res.ok) {
-      alert('Error al publicar')
-      return
+    setLoading(true);
+    try {
+      const res = await fetch('/api/news', { cache: 'no-store' });
+      const json = await res.json();
+      setItems(Array.isArray(json) ? json : []);
+    } catch {
+      setItems([]);
+    } finally {
+      setLoading(false);
     }
-    setTitle(''); setBody(''); setImage(''); setAuthor('')
-    await load()
   }
 
-  async function del(id: string) {
-    if (!ok) return alert('No autenticado')
-    if (!confirm('¿Eliminar esta noticia?')) return
-    const res = await fetch('/api/news?id=' + encodeURIComponent(id), {
-      method: 'DELETE',
-      headers: { 'x-admin-user': user, 'x-admin-pass': pass },
-    })
-    if (!res.ok) return alert('Error al eliminar')
-    await load()
+  function persistToken(t: string) {
+    setToken(t);
+    localStorage.setItem(TOKEN_KEY, t);
   }
 
-  if (!ok) {
-    return (
-      <main className="container mx-auto px-4 py-6">
-        <div className="flex items-center justify-between mb-4">
-          <Link href="/news" className="underline text-sm">← Volver a Noticias</Link>
-        </div>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-center mb-4">Admin de Noticias</h1>
-        <form onSubmit={onLogin} className="card max-w-md mx-auto">
-          <label className="block mb-2 text-sm">Usuario</label>
-          <input className="w-full border rounded-lg p-2 mb-3" value={user} onChange={e=>setUser(e.target.value)} required />
-          <label className="block mb-2 text-sm">Clave</label>
-          <input type="password" className="w-full border rounded-lg p-2 mb-4" value={pass} onChange={e=>setPass(e.target.value)} required />
-          <button className="btn btn-primary w-full" type="submit">Entrar</button>
-          <p className="muted text-xs mt-3">Usa las variables <b>NEXT_PUBLIC_NEWS_ADMIN_USER</b> y <b>NEXT_PUBLIC_NEWS_ADMIN_PASS</b> configuradas en Vercel.</p>
-        </form>
-      </main>
-    )
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token) {
+      alert('Falta token de admin.');
+      return;
+    }
+    if (!title.trim() || !body.trim()) {
+      alert('Título y contenido son requeridos.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append('title', title);
+      fd.append('body', body);
+      fd.append('author', author || 'Admin');
+      if (image) fd.append('image', image, image.name);
+      if (video) fd.append('video', video, video.name);
+
+      const res = await fetch('/api/news', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: fd,
+      });
+
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t || 'Error publicando');
+      }
+
+      setTitle('');
+      setBody('');
+      setAuthor('Admin');
+      setImage(null);
+      setVideo(null);
+      await load();
+      alert('Noticia publicada.');
+    } catch (err: any) {
+      alert(err.message || 'Error publicando');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    if (!token) { alert('Falta token.'); return; }
+    if (!confirm('¿Eliminar esta noticia?')) return;
+
+    try {
+      const res = await fetch(`/api/news?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t || 'Error eliminando');
+      }
+      await load();
+    } catch (err: any) {
+      alert(err.message || 'Error eliminando');
+    }
   }
 
   return (
     <main className="container mx-auto px-4 py-6">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-3 mb-4">
         <Link href="/news" className="underline text-sm">← Volver a Noticias</Link>
-        <button className="btn btn-secondary text-sm" onClick={()=>setOk(false)}>Salir</button>
+        <h1 className="text-2xl md:text-3xl font-extrabold">Panel de Noticias (Admin)</h1>
       </div>
 
-      <h1 className="text-2xl md:text-3xl font-extrabold text-center mb-4">Publicar noticia</h1>
+      <div className="card mb-6">
+        <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
+          <label className="text-sm">Token admin</label>
+          <input
+            type="password"
+            value={token}
+            onChange={(e) => persistToken(e.target.value)}
+            className="border rounded px-3 py-2 w-full md:w-80"
+            placeholder="Ingresa el token"
+          />
+          <p className="muted text-xs">Configura NEWS_ADMIN_TOKEN en Vercel.</p>
+        </div>
+      </div>
 
-      <form onSubmit={addNews} className="card max-w-2xl mx-auto mb-6">
-        <label className="block mb-1 text-sm">Título</label>
-        <input className="w-full border rounded-lg p-2 mb-3" value={title} onChange={e=>setTitle(e.target.value)} required />
+      <form onSubmit={submit} className="card mb-6">
+        <h2 className="text-lg font-semibold mb-3">Nueva noticia</h2>
 
-        <label className="block mb-1 text-sm">Cuerpo (se muestra tal cual, admite saltos de línea)</label>
-        <textarea className="w-full border rounded-lg p-2 mb-3" rows={5} value={body} onChange={e=>setBody(e.target.value)} required />
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm mb-1">Título</label>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="border rounded w-full px-3 py-2"
+            />
+          </div>
 
-        <label className="block mb-1 text-sm">Imagen (URL opcional: Drive público, Imgur, CDN, etc.)</label>
-        <input className="w-full border rounded-lg p-2 mb-3" placeholder="https://..." value={image} onChange={e=>setImage(e.target.value)} />
+          <div>
+            <label className="block text-sm mb-1">Autor (opcional)</label>
+            <input
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              className="border rounded w-full px-3 py-2"
+              placeholder="Admin"
+            />
+          </div>
 
-        <label className="block mb-1 text-sm">Autor (opcional)</label>
-        <input className="w-full border rounded-lg p-2 mb-4" value={author} onChange={e=>setAuthor(e.target.value)} />
+          <div className="md:col-span-2">
+            <label className="block text-sm mb-1">Contenido</label>
+            <textarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              className="border rounded w-full px-3 py-2 min-h-[120px]"
+            />
+          </div>
 
-        <button className="btn btn-primary">Publicar</button>
+          <div>
+            <label className="block text-sm mb-1">Imagen (opcional)</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setImage(e.target.files?.[0] || null)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm mb-1">Video (opcional)</label>
+            <input
+              type="file"
+              accept="video/*"
+              onChange={(e) => setVideo(e.target.files?.[0] || null)}
+            />
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <button className="btn btn-primary" disabled={busy}>
+            {busy ? 'Publicando…' : 'Publicar'}
+          </button>
+        </div>
       </form>
 
-      <h2 className="text-xl font-semibold mb-3">Publicadas</h2>
-      {loading && <div className="card">Cargando…</div>}
-
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4">
+        {loading && <div className="card">Cargando…</div>}
+        {!loading && items.length === 0 && <div className="card">Sin noticias publicadas.</div>}
         {items.map((n) => (
-          <article key={n.id} className="card">
-            {n.image && (
-              <img src={n.image} alt={n.title} className="w-full h-40 object-cover rounded-lg border mb-2" />
-            )}
-            <h3 className="text-lg font-semibold">{n.title}</h3>
-            <p className="muted text-sm mb-2">
-              {new Date(n.createdAt).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' })}
-              {n.author ? ` · ${n.author}` : ''}
+          <div key={n.id} className="card">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">{n.title}</h3>
+              <button className="btn" onClick={() => remove(n.id)}>Eliminar</button>
+            </div>
+            <p className="text-xs text-gray-500 mb-2">
+              {new Date(n.createdAt).toLocaleString()} {n.author ? `· ${n.author}` : ''}
             </p>
-            <p className="leading-relaxed whitespace-pre-wrap mb-3">{n.body}</p>
-            <button className="btn" onClick={() => del(n.id)}>Eliminar</button>
-          </article>
+
+            {n.imageUrl && (
+              <div className="rounded overflow-hidden border mb-2">
+                <img src={n.imageUrl} alt={n.title} className="w-full h-auto" />
+              </div>
+            )}
+
+            {n.videoUrl && (
+              <div className="rounded overflow-hidden border mb-2">
+                <video src={n.videoUrl} controls className="w-full h-auto" />
+              </div>
+            )}
+
+            <p className="whitespace-pre-wrap">{n.body}</p>
+          </div>
         ))}
       </div>
     </main>
-  )
+  );
 }
