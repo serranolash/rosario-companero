@@ -1,11 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect } from 'react';
 import mysteriesJson from '@/data/mysteries.es.json';
-// p.ej. en src/app/(public)/page.tsx o en layout client
-import { useEffect } from 'react'
-import { initPWAUpdatePrompt } from '@/lib/pwa'
-
 
 type Group = {
   id: 'gozosos' | 'dolorosos' | 'gloriosos' | 'luminosos' | string;
@@ -15,24 +12,39 @@ type Group = {
   description?: string;
 };
 
-const normKey = (s = '') => s.toLowerCase().replace(/^misterios?\s+/, '').trim();
+const normKey = (s = '') =>
+  s.toLowerCase().replace(/^misterios?\s+/, '').trim();
+
 const groupKeyForToday = () => {
-  const d = new Date().getDay(); // 0=dom,1=lun,...,6=sáb
+  // 0=dom,1=lun,...,6=sáb
+  const d = new Date().getDay();
   if (d === 1 || d === 6) return 'gozosos';
   if (d === 2 || d === 5) return 'dolorosos';
   if (d === 3 || d === 0) return 'gloriosos';
   return 'luminosos';
 };
 
+// Intento de inicializar el aviso PWA si existe el helper (no rompe si no está)
+function tryInitPWAUpdatePrompt() {
+  (async () => {
+    try {
+      const mod: any = await import('@/lib/pwa');
+      if (mod && typeof mod.initPWAUpdatePrompt === 'function') {
+        mod.initPWAUpdatePrompt();
+      }
+    } catch {
+      /* sin PWA helper -> no pasa nada */
+    }
+  })();
+}
+
 function buildImageCandidates(g: Group) {
   const id = (g.id || '').toLowerCase().trim();
 
-  // lo que venga del JSON (normalizado)
-  const fromJson = g.image
-    ? (g.image.startsWith('/') ? g.image : `/${g.image}`)
-    : null;
+  // Lo que venga desde el JSON (normalizado a ruta absoluta)
+  const fromJson = g.image ? (g.image.startsWith('/') ? g.image : `/${g.image}`) : null;
 
-  // variantes por carpeta y posible typo “goriosos”
+  // Variantes por carpeta y posible typo “goriosos”
   const baseNames = id === 'gloriosos' ? ['gloriosos', 'goriosos'] : [id];
   const folders = ['images', 'imagen']; // plural y singular
 
@@ -40,31 +52,31 @@ function buildImageCandidates(g: Group) {
     baseNames.map((name) => `/${folder}/misterios/${name}.jpg`)
   );
 
-  // orden de prueba: JSON -> por id (images) -> por id (imagen) -> typo
   const candidates = [
     ...(fromJson ? [fromJson] : []),
     ...byId,
   ];
 
-  // elimina duplicados
+  // Elimina duplicados
   return Array.from(new Set(candidates));
 }
 
 export default function HomePage() {
+  useEffect(() => {
+    tryInitPWAUpdatePrompt();
+  }, []);
+
   const all = mysteriesJson as Group[];
-  const wanted = groupKeyForToday();  
-  useEffect(() => { initPWAUpdatePrompt() }, [])
+  const wanted = groupKeyForToday();
 
   const group =
-    all.find(g => (g.id || '').toLowerCase() === wanted) ||
-    all.find(g => normKey(g.title) === wanted) ||
+    all.find((g) => (g.id || '').toLowerCase() === wanted) ||
+    all.find((g) => normKey(g.title) === wanted) ||
     all[0];
 
   const daysLabel = group?.days?.join(' / ') ?? '';
-
   const candidates = group ? buildImageCandidates(group) : [];
-  // primer candidato
-  let imgSrc = candidates[0];
+  const imgSrc = candidates[0];
 
   const shareWhatsapp = () => {
     const origin =
@@ -79,6 +91,7 @@ export default function HomePage() {
       {/* Misterio del día */}
       <section className="card mb-6">
         <span className="badge mb-3">Misterio del día</span>
+
         <div className="flex items-center gap-4">
           {imgSrc ? (
             <div className="mystery-thumb">
@@ -86,14 +99,15 @@ export default function HomePage() {
                 src={imgSrc}
                 alt={group?.title || 'Misterio'}
                 onError={(e) => {
-                  // si falla, pasamos al siguiente candidato
                   const el = e.currentTarget as HTMLImageElement;
-                  const idx = candidates.indexOf(el.src.replace(window.location.origin, ''));
+                  // intenta siguiente candidato
+                  const base = typeof window !== 'undefined' ? window.location.origin : '';
+                  const current = el.src.replace(base, '');
+                  const idx = candidates.indexOf(current);
                   const next = candidates[idx + 1];
                   if (next) {
                     el.src = next;
                   } else {
-                    // sin más candidatos, mostramos placeholder
                     el.onerror = null;
                     el.alt = 'Imagen no disponible';
                     el.style.display = 'none';
@@ -106,27 +120,36 @@ export default function HomePage() {
               Sin imagen
             </div>
           )}
+
           <div>
             <h2 className="text-2xl md:text-3xl font-extrabold">{group?.title}</h2>
             {!!daysLabel && <p className="muted">Hoy: {daysLabel}</p>}
           </div>
         </div>
+
         {group?.description && <p className="muted mt-3">{group.description}</p>}
       </section>
 
       {/* Acciones principales */}
       <section className="card">
         <p className="mb-3">Has completado 2 rosarios.</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+
+        {/* Grid adaptable para que no “corran” los botones */}
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           <Link href="/guide" className="btn btn-secondary w-full text-center">
             Guía de Misterios
           </Link>
+
           <Link href="/lecturas" className="btn btn-secondary w-full text-center">
             Evangelio y lecturas de hoy
           </Link>
-          <Link href="/noticias" className="btn btn-secondary w-full text-center">
+
+          {/* URL corregida: /news */}
+          <Link href="/news" className="btn btn-secondary w-full text-center">
             Noticias
           </Link>
+
+          {/* Canal de YouTube */}
           <a
             href="https://youtube.com/channel/UCCB6TeHkWMk9pNTvAvMGZpw"
             target="_blank"
@@ -135,9 +158,17 @@ export default function HomePage() {
           >
             Canal de YouTube
           </a>
+
+          {/* Rezos */}
           <Link href="/pray/full" className="btn btn-primary w-full text-center">
             Rezar el rosario completo
           </Link>
+
+          <Link href="/pray/decade" className="btn w-full text-center">
+            Rezar una decena
+          </Link>
+
+          {/* Compartir */}
           <button onClick={shareWhatsapp} className="btn w-full text-center">
             Compartir por WhatsApp
           </button>
