@@ -1,23 +1,15 @@
 {
-  "id": "/?app=rosario-v14",
+  "id": "/rosario-v15",             
   "name": "Rosario Compañero",
   "short_name": "Rosario",
   "description": "Aplicación para rezar el Santo Rosario",
-  "start_url": "/?src=pwa-v3",
+  "start_url": "/?src=pwa-v15",       
   "scope": "/",
   "display": "standalone",
   "background_color": "#faf8f3",
   "theme_color": "#1d4ed8",
   "icons": [
-    {
-      "src": "/icons/icon-192-v3.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/icons/icon-512-v3.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
+    { "src": "/icons/icon-192-v3.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-512-v3.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }

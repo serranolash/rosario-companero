@@ -5,7 +5,7 @@ import ThemeProvider from './providers/ThemeProvider'
 export const metadata: Metadata = {
   title: 'Rosario Compañero',
   description: 'Aplicación para rezar el Santo Rosario',
-  manifest: '/manifest.json?v=3',
+  manifest: '/manifest.json?v=15',
   icons: {
     icon: '/favicon-v3.ico',
     apple: '/apple-touch-icon-v3.png',
