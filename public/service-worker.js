@@ -1,6 +1,6 @@
 // public/service-worker.js
 // Incrementa esta versión cuando quieras forzar actualización
-const SW_VERSION = 'v13';
+const SW_VERSION = 'v14';
 
 // Solo haz skipWaiting cuando el cliente lo solicite
 self.addEventListener('message', (event) => {
