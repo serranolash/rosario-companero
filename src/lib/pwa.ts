@@ -3,7 +3,7 @@ export function initPWA() {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
   // fuerza pedir el SW nuevo
-  const swUrl = '/service-worker.js?v=16';
+  const swUrl = '/service-worker.js?v=17';
 
   navigator.serviceWorker
     .register(swUrl, { scope: '/' })

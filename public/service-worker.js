@@ -1,5 +1,5 @@
 // public/service-worker.js
-const SW_VERSION = 'v16'; // <— SUBÍ versión
+const SW_VERSION = 'v17'; // <— SUBÍ versión
 
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
