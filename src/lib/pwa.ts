@@ -1,63 +1,67 @@
 // src/lib/pwa.ts
-'use client';
+// Registrador de Service Worker con limpieza segura de versiones antiguas
 
-// Evita múltiples registros
-let _swRegistered = false;
+const SW_VERSION = 'v14';                       // <- sube aquí cuando cambies el SW
+const SW_URL = `/service-worker.js?v=${SW_VERSION}`;
 
-// Registro seguro del Service Worker SOLO en producción
-export function registerSW(versionTag: string = 'v12') {
-  if (typeof window === 'undefined') return;
+let _registered = false;
+
+export function registerSW() {
+  if (_registered) return;
+  _registered = true;
+
   if (!('serviceWorker' in navigator)) return;
-  if (process.env.NODE_ENV !== 'production') return;
-  if (_swRegistered) return; // ya está
 
-  const swUrl = `/service-worker.js?v=${encodeURIComponent(versionTag)}`;
-
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register(swUrl)
-      .then((registration) => {
-        let refreshing = false;
-
-        // Recarga UNA sola vez cuando el nuevo SW toma control
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (refreshing) return;
-          refreshing = true;
-          // Pequeño delay para evitar parpadeos
-          setTimeout(() => window.location.reload(), 150);
-        });
-
-        // Si ya hay uno esperando, pídele activarse (solo una vez)
-        if (registration.waiting) {
-          registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-        }
-
-        // Si aparece update, cuando instale pedimos el swap
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          if (!newWorker) return;
-
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && registration.waiting) {
-              registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+  window.addEventListener('load', async () => {
+    try {
+      // 1) Limpieza de SW viejos (v12, v13, etc.)
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(
+        regs.map(async (r) => {
+          try {
+            const url = r.active?.scriptURL || r.installing?.scriptURL || r.waiting?.scriptURL || '';
+            // Si el SW activo NO es la versión actual, lo desregistramos
+            if (url && !url.includes(`?v=${SW_VERSION}`)) {
+              await r.unregister();
             }
-          });
+          } catch {}
+        })
+      );
+
+      // 2) Registrar el SW actual (v14)
+      const reg = await navigator.serviceWorker.register(SW_URL, { scope: '/' });
+
+      // 3) Si hay uno nuevo esperando, forzamos la activación cuando volvés al foco
+      if (reg.waiting) {
+        reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      }
+
+      // 4) Cuando llegue un updatefound, al activarse, recargamos suavemente
+      reg.addEventListener('updatefound', () => {
+        const sw = reg.installing;
+        if (!sw) return;
+        sw.addEventListener('statechange', () => {
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+            // Ya hay uno nuevo listo -> pedir que tome control
+            sw.postMessage({ type: 'SKIP_WAITING' });
+          }
         });
-      })
-      .catch(() => {
-        // silencioso
       });
 
-    _swRegistered = true;
+      // 5) Cuando cambie el controlador, refrescamos una vez (sin loop)
+      let refreshed = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshed) return;
+        refreshed = true;
+        location.reload();
+      });
+    } catch (err) {
+      console.warn('[PWA] SW register error', err);
+    }
   });
 }
 
-/**
- * initPWAUpdatePrompt
- * Wrapper compatible con tu import previo.
- * Si más adelante quieres mostrar un toast/botón “Actualizar”, aquí es el lugar.
- */
-export function initPWAUpdatePrompt(versionTag: string = 'v12') {
-  // Por ahora, solo registramos el SW con el tag de versión
-  registerSW(versionTag);
+// Úsalo en páginas públicas (home/layout) para registrar el SW
+export function initPWA() {
+  registerSW();
 }

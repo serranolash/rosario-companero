@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useEffect } from 'react';
 import mysteriesJson from '@/data/mysteries.es.json';
+import { registerSW } from '@/lib/pwa';
+import { initPWA } from '@/lib/pwa';
 
 type Group = {
   id: 'gozosos' | 'dolorosos' | 'gloriosos' | 'luminosos' | string;
@@ -63,6 +65,8 @@ function buildImageCandidates(g: Group) {
 
 export default function HomePage() {
   useEffect(() => {
+    registerSW();
+    initPWA(); 
     tryInitPWAUpdatePrompt();
   }, []);
 

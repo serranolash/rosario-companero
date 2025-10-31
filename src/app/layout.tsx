@@ -5,7 +5,11 @@ import ThemeProvider from './providers/ThemeProvider'
 export const metadata: Metadata = {
   title: 'Rosario Compañero',
   description: 'Aplicación para rezar el Santo Rosario',
-  manifest: '/manifest.json',
+  manifest: '/manifest.json?v=3',
+  icons: {
+    icon: '/favicon-v3.ico',
+    apple: '/apple-touch-icon-v3.png',
+  },
 }
 export const viewport: Viewport = { themeColor: '#5d87ff' }
 
